@@ -40,3 +40,49 @@ class Board:
         for row in self.grid:
             print(' | '.join(str(cell) for cell in row))
         print('-' * (self.COLS * 4))
+        
+    def check_winner(self):
+        """
+        Check if someone has won.
+        Returns 1 if player 1 won, 2 if player 2 won, None if no winner yet.
+        """
+        # Check every cell on the board as a possible "starting point" of a win
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                player = self.grid[row][col]
+                if player == 0:
+                    continue  # empty cell, skip it
+
+                # Check 4 directions from this cell: right, down, down-right, down-left
+                if self._check_direction(row, col, player, 0, 1):   # horizontal →
+                    return player
+                if self._check_direction(row, col, player, 1, 0):   # vertical ↓
+                    return player
+                if self._check_direction(row, col, player, 1, 1):   # diagonal ↘
+                    return player
+                if self._check_direction(row, col, player, 1, -1):  # diagonal ↙
+                    return player
+
+        return None
+
+    def _check_direction(self, row, col, player, row_step, col_step):
+        """
+        Check if there are 4 in a row starting at (row, col),
+        moving in the direction (row_step, col_step).
+        """
+        for i in range(4):
+            r = row + i * row_step
+            c = col + i * col_step
+
+            # Make sure we don't go off the board
+            if r < 0 or r >= self.ROWS or c < 0 or c >= self.COLS:
+                return False
+
+            if self.grid[r][c] != player:
+                return False
+
+        return True
+
+    def is_draw(self):
+        """Board is full and nobody has won = draw."""
+        return self.check_winner() is None and len(self.get_valid_moves()) == 0
