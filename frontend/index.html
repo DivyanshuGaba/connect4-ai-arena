@@ -31,7 +31,58 @@
       color: #555;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 560px;
+      margin-bottom: 0.8rem;
+    }
+
+    .score-box {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .score-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #555;
+    }
+
+    .score-item span {
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #f0f0f0;
+      line-height: 1;
+    }
+
+    .score-item.player-score span { color: #c0392b; }
+    .score-item.ai-score span     { color: #2980b9; }
+
+    .turn-display {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #666;
+    }
+
+    #turn-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #c0392b;
+      transition: background 0.3s;
     }
 
     #board-canvas {
@@ -41,7 +92,7 @@
     }
 
     .controls {
-      margin-top: 1.5rem;
+      margin-top: 1.2rem;
       display: flex;
       gap: 1rem;
     }
@@ -59,36 +110,54 @@
       transition: border-color 0.2s, color 0.2s;
     }
 
-    button:hover { border-color: #c0392b; color: #c0392b; }
+    button:hover  { border-color: #c0392b; color: #c0392b; }
     button.active { border-color: #c0392b; color: #c0392b; }
 
     #status {
-      margin-top: 1.2rem;
+      margin-top: 1rem;
       font-size: 0.8rem;
-      color: #666;
+      color: #555;
       letter-spacing: 0.08em;
       min-height: 1.4rem;
       text-align: center;
     }
 
-    #status.highlight { color: #c0392b; }
+    #status.highlight { color: #f1c40f; font-weight: bold; }
 
     .game-id {
-      margin-top: 0.6rem;
-      font-size: 0.65rem;
-      color: #333;
+      margin-top: 0.4rem;
+      font-size: 0.62rem;
+      color: #2a2a2a;
       letter-spacing: 0.06em;
     }
   </style>
 </head>
 <body>
+
   <h1>Connect 4 AI Arena</h1>
   <p class="subtitle">Minimax · Alpha-Beta Pruning · MCTS</p>
+
+  <div class="hud">
+    <div class="score-box">
+      <div class="score-item player-score">
+        <span id="score-player">0</span>
+        You
+      </div>
+      <div class="score-item ai-score">
+        <span id="score-ai">0</span>
+        AI
+      </div>
+    </div>
+    <div class="turn-display">
+      <div id="turn-indicator"></div>
+      <span id="turn-label">—</span>
+    </div>
+  </div>
 
   <canvas id="board-canvas" width="560" height="480"></canvas>
 
   <div class="controls">
-    <button id="btn-new" class="active">New Game</button>
+    <button id="btn-new">New Game</button>
     <button id="btn-watch">Watch AI vs AI</button>
   </div>
 
