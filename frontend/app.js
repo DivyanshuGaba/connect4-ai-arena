@@ -7,7 +7,7 @@ const COLS = 7;
 const ROWS = 6;
 const CELL = 80;
 const RADIUS = 30;
-const API = 'http://127.0.0.1:8000';
+const API = 'https://connect4-ai-arena.onrender.com';
 
 const COLORS = {
   board:    '#1a1a2e',
@@ -194,7 +194,7 @@ async function watchAIvsAI() {
   gameIdLabel.textContent = 'mode: AI vs AI';
   drawBoard();
 
-  activeSocket = new WebSocket(`ws://127.0.0.1:8000/game/live/watch`);
+ activeSocket = new WebSocket(`wss://connect4-ai-arena.onrender.com/game/live/watch`);
   const ws = activeSocket;
 
   ws.onmessage = (event) => {
