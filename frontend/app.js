@@ -10,29 +10,38 @@ const ROWS = 6;
 const API  = 'https://connect4-ai-arena.onrender.com';
 
 const C = {
-  boardBg:  '#0e1628',
-  hole:     '#07080f',
-  p1:       '#e63946',
-  p1light:  '#ff8fa3',
-  p2:       '#2196f3',
-  p2light:  '#64b5f6',
-  win:      '#ffd60a',
-  winlight: '#fff176',
-  ghost:    'rgba(230,57,70,0.15)',
-  ghostRing:'rgba(230,57,70,0.5)',
+  boardBg:   '#0e1628',
+  hole:      '#07080f',
+  p1:        '#e63946',
+  p1light:   '#ff8fa3',
+  p2:        '#2196f3',
+  p2light:   '#64b5f6',
+  win:       '#ffd60a',
+  winlight:  '#fff176',
+  ghost:     'rgba(230,57,70,0.15)',
+  ghostRing: 'rgba(230,57,70,0.5)',
 };
 
 let CELL, RADIUS;
 const pieceCache = {};
 
+function shadeHex(hex, amt) {
+  const n = parseInt(hex.replace('#',''), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16) + amt));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amt));
+  const b = Math.max(0, Math.min(255, (n & 0xff) + amt));
+  return '#' + ((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1);
+}
+
 function getPieceImg(player) {
   const key = `${player}-${RADIUS}`;
   if (pieceCache[key]) return pieceCache[key];
 
-  const off  = document.createElement('canvas');
-  off.width  = off.height = (RADIUS + 4) * 2;
-  const oc   = off.getContext('2d');
-  const cx   = RADIUS + 4;
+  const off = document.createElement('canvas');
+  const sz  = (RADIUS + 4) * 2;
+  off.width = off.height = sz;
+  const oc  = off.getContext('2d');
+  const cx  = RADIUS + 4;
 
   const base  = player === 'win' ? C.win      : player === 1 ? C.p1      : C.p2;
   const light = player === 'win' ? C.winlight : player === 1 ? C.p1light : C.p2light;
@@ -120,14 +129,6 @@ function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function shadeHex(hex, amt) {
-  const n = parseInt(hex.replace('#',''), 16);
-  const r = Math.max(0, Math.min(255, (n >> 16) + amt));
-  const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amt));
-  const b = Math.max(0, Math.min(255, (n & 0xff) + amt));
-  return '#' + ((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1);
-}
-
 function drawPiece(x, y, player, alpha) {
   if (alpha === undefined) alpha = 1;
   const img = getPieceImg(player);
@@ -154,12 +155,10 @@ function drawBoard() {
     for (let c = 0; c < COLS; c++) {
       const x = c*CELL + CELL/2;
       const y = r*CELL + CELL/2;
-
       ctx.beginPath();
       ctx.arc(x, y, RADIUS+3, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fill();
-
       ctx.beginPath();
       ctx.arc(x, y, RADIUS, 0, Math.PI*2);
       ctx.fillStyle = C.hole;
@@ -171,19 +170,21 @@ function drawBoard() {
     for (let c = 0; c < COLS; c++) {
       const val = grid[r][c];
       if (!val) continue;
-      if (fallingPieces.some(p => p.col===c && p.targetRow===r)) continue;
-
-      const x = c*CELL + CELL/2;
-      const y = r*CELL + CELL/2;
-      const isWin = winCells.some(([wr,wc]) => wr===r && wc===c);
+      // skip if this cell has a falling piece animating into it
+      if (fallingPieces.some(p => p.col === c && p.targetRow === r)) continue;
+      const x      = c*CELL + CELL/2;
+      const y      = r*CELL + CELL/2;
+      const isWin  = winCells.some(([wr,wc]) => wr===r && wc===c);
       drawPiece(x, y, isWin ? 'win' : val, isWin ? 0.6 + winPulse*0.4 : 1);
     }
   }
 
+  // draw falling pieces at their current animated y position
   fallingPieces.forEach(p => {
     drawPiece(p.col*CELL + CELL/2, p.y, p.player);
   });
 
+  // ghost piece on hover
   if (hoverCol >= 0 && !gameOver && !watchMode && gameId && !animRunning) {
     const dropRow = findDropRow(hoverCol);
     if (dropRow >= 0) {
@@ -202,13 +203,15 @@ function drawBoard() {
   }
 }
 
+// Animate a piece falling. The piece must already be in `grid` before calling this.
+// drawBoard() skips cells that have a matching fallingPiece so there's no double-draw.
 function animateDrop(pieces, onDone) {
-  const duration  = 320;
+  const duration  = 300;
   const startTime = performance.now();
 
   pieces.forEach(p => {
-    p.startY = CELL/2;
-    p.endY   = p.targetRow*CELL + CELL/2;
+    p.startY = CELL / 2;
+    p.endY   = p.targetRow * CELL + CELL / 2;
     p.y      = p.startY;
   });
 
@@ -217,15 +220,14 @@ function animateDrop(pieces, onDone) {
 
   function step(now) {
     const t = Math.min((now - startTime) / duration, 1);
-    const e = easeOutCubic(t);
-    pieces.forEach(p => { p.y = p.startY + (p.endY - p.startY) * e; });
+    pieces.forEach(p => { p.y = p.startY + (p.endY - p.startY) * easeOutCubic(t); });
     drawBoard();
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
       fallingPieces = [];
       animRunning   = false;
-      drawBoard();
+      // piece is already in grid — just call the callback
       if (onDone) onDone();
     }
   }
@@ -257,13 +259,13 @@ function setTurn(player, thinking) {
   turnDot.className = thinking ? 'pulse' : '';
   if (player === 1) {
     turnDot.style.background = C.p1;
-    turnLbl.textContent = thinking ? 'Thinking...' : 'Your turn';
+    turnLbl.textContent      = thinking ? 'Thinking...' : 'Your turn';
   } else if (player === 2) {
     turnDot.style.background = C.p2;
-    turnLbl.textContent = thinking ? 'Thinking...' : 'AI';
+    turnLbl.textContent      = thinking ? 'AI thinking...' : 'AI';
   } else {
     turnDot.style.background = '#3d5068';
-    turnLbl.textContent = player || '—';
+    turnLbl.textContent      = player || '—';
   }
 }
 
@@ -306,82 +308,84 @@ async function newGame() {
 
 async function sendMove(col) {
   if (gameOver || watchMode || !gameId || animRunning) return;
+
   const dropRow = findDropRow(col);
   if (dropRow < 0) { setStatus('That column is full — try another'); return; }
 
   setTurn(2, true);
   setStatus('AI is thinking...', 'thinking');
 
-  animateDrop([{ col, targetRow: dropRow, player: 1 }], async () => {
-    grid[dropRow][col] = 1;
+  // KEY FIX: set the piece in grid BEFORE animating
+  // drawBoard skips pieces that are in fallingPieces, so no double-draw
+  grid[dropRow][col] = 1;
 
-    try {
-      const res = await fetch(`${API}/game/${gameId}/move`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ col }),
-      });
+  // KEY FIX: fire API call in parallel with animation — no waiting after drop
+  const apiPromise = fetch(`${API}/game/${gameId}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ col }),
+  }).then(r => r.ok ? r.json() : null).catch(() => null);
 
-      if (!res.ok) {
-        setStatus('Invalid move — try another column');
-        grid[dropRow][col] = 0;
-        drawBoard();
-        setTurn(1);
-        return;
-      }
+  // Wait for animation AND api simultaneously
+  const [, data] = await Promise.all([
+    new Promise(resolve => animateDrop([{ col, targetRow: dropRow, player: 1 }], resolve)),
+    apiPromise,
+  ]);
 
-      const data = await res.json();
+  if (!data) {
+    setStatus('Network error — check your connection');
+    grid[dropRow][col] = 0;
+    drawBoard();
+    setTurn(1);
+    return;
+  }
 
-      if (data.winner === 1) {
-        grid     = data.grid;
+  if (data.winner === 1) {
+    grid = data.grid;
+    winCells = findWinCells(grid);
+    drawBoard();
+    startWinPulse();
+    setStatus('You win! 🎉', 'win');
+    setTurn('You won!');
+    scores.p1++;
+    updateScores();
+    gameOver = true;
+    return;
+  }
+
+  if (data.is_draw && !data.winner) {
+    grid = data.grid;
+    drawBoard();
+    setStatus("It's a draw!");
+    setTurn('Draw');
+    gameOver = true;
+    return;
+  }
+
+  if (data.ai_move !== undefined) {
+    const aiRow = findDropRow(data.ai_move, data.grid);
+
+    // KEY FIX: set AI piece in grid BEFORE its animation too
+    grid[aiRow][data.ai_move] = 2;
+
+    animateDrop([{ col: data.ai_move, targetRow: aiRow, player: 2 }], () => {
+      grid = data.grid; // sync with server (should match what we already have)
+      if (data.winner === 2) {
         winCells = findWinCells(grid);
         drawBoard();
         startWinPulse();
-        setStatus('You win! 🎉', 'win');
-        setTurn('You won!');
-        scores.p1++;
+        setStatus('AI wins!', 'lose');
+        setTurn('AI won');
+        scores.p2++;
         updateScores();
         gameOver = true;
-        return;
-      }
-
-      if (data.is_draw && !data.winner) {
-        grid = data.grid;
+      } else {
         drawBoard();
-        setStatus("It's a draw!");
-        setTurn('Draw');
-        gameOver = true;
-        return;
+        setTurn(1);
+        setStatus(`AI played col ${data.ai_move} — your turn`);
       }
-
-      if (data.ai_move !== undefined) {
-        const aiRow = findDropRow(data.ai_move, data.grid);
-        animateDrop([{ col: data.ai_move, targetRow: aiRow, player: 2 }], () => {
-          grid = data.grid;
-          drawBoard();
-          if (data.winner === 2) {
-            winCells = findWinCells(grid);
-            drawBoard();
-            startWinPulse();
-            setStatus('AI wins!', 'lose');
-            setTurn('AI won');
-            scores.p2++;
-            updateScores();
-            gameOver = true;
-          } else {
-            setTurn(1);
-            setStatus(`AI played col ${data.ai_move} — your turn`);
-          }
-        });
-      }
-
-    } catch {
-      setStatus('Network error — check your connection');
-      grid[dropRow][col] = 0;
-      drawBoard();
-      setTurn(1);
-    }
-  });
+    });
+  }
 }
 
 async function watchAIvsAI() {
@@ -414,6 +418,8 @@ async function watchAIvsAI() {
       const newRow = findDropRow(col, data.grid);
       setTurn(data.player);
       setStatus(`Player ${data.player} → col ${col}  (${data.think_time_seconds}s)`);
+      // Set piece before animation
+      grid[newRow][col] = data.player;
       animateDrop([{ col, targetRow: newRow, player: data.player }], () => {
         grid = data.grid;
         drawBoard();
@@ -425,7 +431,8 @@ async function watchAIvsAI() {
         setStatus(data.message, data.winner ? 'win' : '');
         setTurn('Game over');
         gameOver = true;
-      }, 500);
+        drawBoard();
+      }, 400);
     }
   };
 
@@ -434,8 +441,8 @@ async function watchAIvsAI() {
 }
 
 function colFromEvent(e) {
-  const rect   = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
+  const rect    = canvas.getBoundingClientRect();
+  const scaleX  = canvas.width / rect.width;
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   return Math.floor((clientX - rect.left) * scaleX / CELL);
 }
@@ -445,10 +452,7 @@ canvas.addEventListener('mousemove', (e) => {
   if (col === hoverCol) return;
   hoverCol = col;
   if (!animRunning && !hoverRafId) {
-    hoverRafId = requestAnimationFrame(() => {
-      hoverRafId = null;
-      drawBoard();
-    });
+    hoverRafId = requestAnimationFrame(() => { hoverRafId = null; drawBoard(); });
   }
 });
 
@@ -463,10 +467,7 @@ canvas.addEventListener('touchmove', (e) => {
   if (col === hoverCol) return;
   hoverCol = col;
   if (!animRunning && !hoverRafId) {
-    hoverRafId = requestAnimationFrame(() => {
-      hoverRafId = null;
-      drawBoard();
-    });
+    hoverRafId = requestAnimationFrame(() => { hoverRafId = null; drawBoard(); });
   }
 }, { passive: false });
 
@@ -496,7 +497,7 @@ document.getElementById('btn-rules').addEventListener('click', () => {
 const labelsEl = document.getElementById('col-labels');
 for (let i = 0; i < COLS; i++) {
   const d = document.createElement('div');
-  d.className = 'col-label';
+  d.className   = 'col-label';
   d.textContent = i;
   labelsEl.appendChild(d);
 }
