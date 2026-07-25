@@ -20,9 +20,7 @@
       --border: #1a2640;
     }
 
-    html, body {
-      height: 100%;
-    }
+    html, body { height: 100%; }
 
     body {
       background: var(--bg);
@@ -35,10 +33,7 @@
       padding: 1.5rem 1rem 2rem;
     }
 
-    header {
-      text-align: center;
-      margin-bottom: 1.25rem;
-    }
+    header { text-align: center; margin-bottom: 1.25rem; }
 
     h1 {
       font-size: clamp(1rem, 4vw, 1.5rem);
@@ -204,7 +199,26 @@
       color: #1d2d42;
     }
 
-    /* ── RULES MODAL ── */
+    .cold-start-notice {
+      margin-top: 0.8rem;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.04);
+      border: 0.5px solid #2a3a50;
+      border-radius: 4px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .cold-start-notice p {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      color: #546e8a;
+      letter-spacing: 0.1em;
+      text-align: center;
+      margin: 0;
+      text-transform: uppercase;
+    }
+
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -300,11 +314,7 @@
       color: #a8b8cc;
     }
 
-    .legend-dot {
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-    }
+    .legend-dot { width: 14px; height: 14px; border-radius: 50%; }
 
     .btn-start {
       width: 100%;
@@ -415,6 +425,10 @@
 
   <div id="status">Press New Game to start</div>
   <div class="game-id" id="game-id-label"></div>
+
+  <div class="cold-start-notice">
+    <p>First load may take up to 60 seconds — free tier server waking up</p>
+  </div>
 
   <script src="app.js"></script>
 </body>
