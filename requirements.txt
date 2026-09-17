@@ -17,3 +17,7 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.49.0
 websockets==16.0
+sqlalchemy[asyncio]==2.0.54
+asyncpg==0.30.0
+pytest-asyncio==1.4.0
+aiosqlite==0.21.0

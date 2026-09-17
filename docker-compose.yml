@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build: .
@@ -8,3 +6,21 @@ services:
     volumes:
       - .:/app
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://connect4:connect4dev@db:5432/connect4
+
+  db:
+    image: postgres:16
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: connect4
+      POSTGRES_PASSWORD: connect4dev
+      POSTGRES_DB: connect4
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
