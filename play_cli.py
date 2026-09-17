@@ -1,22 +1,30 @@
-from engine.board import Board
+from games.connect4.state import Connect4State
+from games.connect4.heuristics import score_position
 from ai.minimax import find_best_move
 
 
+def print_board(state):
+    for row in state.grid:
+        print(' | '.join(str(cell) for cell in row))
+    print('-' * (len(state.grid[0]) * 4))
+
+
 def main():
-    board = Board()
+    state = Connect4State()
     human_player = 1
     ai_player = 2
 
     print("Welcome to Connect 4! You are Player 1 (X). The AI is Player 2 (O).")
-    board.print_board()
-
-    current_player = human_player
+    print_board(state)
 
     while True:
-        valid_moves = board.get_valid_moves()
-        if not valid_moves:
-            print("It's a draw!")
+        result = state.result()
+        if result is not None:
+            print("It's a draw!" if result == 0 else f"Player {result} wins!")
             break
+
+        current_player = state.current_player
+        valid_moves = state.legal_moves()
 
         if current_player == human_player:
             move = input(f"Your turn, choose a column {valid_moves}: ")
@@ -30,18 +38,11 @@ def main():
                 continue
         else:
             print("AI is thinking...")
-            col = find_best_move(board, ai_player, depth=5)
+            col = find_best_move(state, ai_player, heuristic_fn=score_position, depth=5)
             print(f"AI chooses column {col}")
 
-        board.drop_piece(col, current_player)
-        board.print_board()
-
-        winner = board.check_winner()
-        if winner:
-            print(f"Player {winner} wins!")
-            break
-
-        current_player = ai_player if current_player == human_player else human_player
+        state = state.apply(col)
+        print_board(state)
 
 
 if __name__ == "__main__":

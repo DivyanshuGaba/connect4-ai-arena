@@ -1,39 +1,36 @@
 import random
 import time
-from engine.board import Board
+from games.connect4.state import Connect4State
+from games.connect4.heuristics import score_position
 from ai.minimax import find_best_move
 from ai.mcts import mcts_move
 
 
-def random_move(board):
-    return random.choice(board.get_valid_moves())
+def random_move(state):
+    return random.choice(state.legal_moves())
 
 
 def play_one_game(player1_fn, player2_fn):
     """
-    Play one game between two AI functions.
-    Returns winner (1, 2, or None for draw) and total time per player.
+    Play one game between two AI functions, each taking a state and
+    returning a move. Returns winner (1, 2, or None for draw) and total
+    time per player.
     """
-    board = Board()
-    current_player = 1
+    state = Connect4State()
     times = {1: 0.0, 2: 0.0}
     fns = {1: player1_fn, 2: player2_fn}
 
     while True:
-        if not board.get_valid_moves():
-            return None, times
+        result = state.result()
+        if result is not None:
+            return (result if result != 0 else None), times
 
+        current_player = state.current_player
         start = time.time()
-        col = fns[current_player](board)
+        col = fns[current_player](state)
         times[current_player] += time.time() - start
 
-        board.drop_piece(col, current_player)
-
-        winner = board.check_winner()
-        if winner:
-            return winner, times
-
-        current_player = 2 if current_player == 1 else 1
+        state = state.apply(col)
 
 
 def run_matchup(name, player1_fn, player2_fn, num_games=20):
@@ -60,15 +57,15 @@ def run_matchup(name, player1_fn, player2_fn, num_games=20):
 
 
 if __name__ == "__main__":
-    minimax_d4 = lambda b: find_best_move(b, ai_player=1, depth=4)
-    minimax_d4_p2 = lambda b: find_best_move(b, ai_player=2, depth=4)
-    mcts_500 = lambda b: mcts_move(b, ai_player=1, iterations=500)
-    mcts_500_p2 = lambda b: mcts_move(b, ai_player=2, iterations=500)
-    random_p1 = lambda b: random_move(b)
-    random_p2 = lambda b: random_move(b)
+    minimax_d4 = lambda s: find_best_move(s, ai_player=1, heuristic_fn=score_position, depth=4)
+    minimax_d4_p2 = lambda s: find_best_move(s, ai_player=2, heuristic_fn=score_position, depth=4)
+    mcts_500 = lambda s: mcts_move(s, iterations=500)
+    mcts_500_p2 = lambda s: mcts_move(s, iterations=500)
+    random_p1 = lambda s: random_move(s)
+    random_p2 = lambda s: random_move(s)
 
     print("=" * 50)
-    print("CONNECT 4 — ALGORITHM BENCHMARK")
+    print("CONNECT 4 -- ALGORITHM BENCHMARK")
     print("=" * 50)
 
     run_matchup(

@@ -1,62 +1,80 @@
+"""
+Minimax with alpha-beta pruning, written against the GameState interface.
+
+This file has no idea what Connect 4 or Chess is -- it only calls
+state.legal_moves(), state.apply(move), state.result(), and a
+heuristic_fn(state, player) that the caller supplies. That's what lets the
+exact same algorithm serve any game plugged in behind games/base.py.
+"""
+
 import math
-from copy import deepcopy
-from ai.heuristics import score_position
+from typing import Any, Callable, Optional
+
+from games.base import GameState
+
+HeuristicFn = Callable[[GameState, int], float]
+
+WIN_SCORE = 1_000_000
 
 
-def is_terminal_node(board):
-    """Game over = someone won, or no moves left (draw)."""
-    return board.check_winner() is not None or len(board.get_valid_moves()) == 0
-
-
-def minimax(board, depth, alpha, beta, maximizing_player, ai_player):
+def _minimax(
+    state: GameState,
+    depth: int,
+    alpha: float,
+    beta: float,
+    maximizing_player: bool,
+    ai_player: int,
+    heuristic_fn: HeuristicFn,
+) -> tuple[Optional[Any], float]:
     opponent = 2 if ai_player == 1 else 1
-    valid_moves = board.get_valid_moves()
-    winner = board.check_winner()
+    result = state.result()
 
-    # Base case: we've searched deep enough, or the game has ended
-    if depth == 0 or is_terminal_node(board):
-        if winner == ai_player:
-            return (None, 1_000_000)        # AI wins this line — best possible
-        elif winner == opponent:
-            return (None, -1_000_000)       # opponent wins this line — worst possible
-        elif len(valid_moves) == 0:
-            return (None, 0)                # draw
-        else:
-            return (None, score_position(board, ai_player))  # ran out of depth, use heuristic
+    # Base case: game over, or we've searched deep enough
+    if result is not None or depth == 0:
+        if result == ai_player:
+            return None, WIN_SCORE
+        elif result == opponent:
+            return None, -WIN_SCORE
+        elif result == 0:  # draw
+            return None, 0
+        else:  # depth exhausted, game still ongoing -- fall back to heuristic
+            return None, heuristic_fn(state, ai_player)
+
+    legal_moves = state.legal_moves()
+    best_move = legal_moves[0]
 
     if maximizing_player:
-        # AI's turn — trying to maximize score
         value = -math.inf
-        best_col = valid_moves[0]
-        for col in valid_moves:
-            board_copy = deepcopy(board)
-            board_copy.drop_piece(col, ai_player)
-            _, new_score = minimax(board_copy, depth - 1, alpha, beta, False, ai_player)
+        for move in legal_moves:
+            _, new_score = _minimax(
+                state.apply(move), depth - 1, alpha, beta, False, ai_player, heuristic_fn
+            )
             if new_score > value:
-                value = new_score
-                best_col = col
+                value, best_move = new_score, move
             alpha = max(alpha, value)
             if alpha >= beta:
-                break  # prune — opponent would never let us reach this branch
-        return best_col, value
+                break  # opponent would never let us reach this branch
+        return best_move, value
     else:
-        # Opponent's turn — trying to minimize AI's score
         value = math.inf
-        best_col = valid_moves[0]
-        for col in valid_moves:
-            board_copy = deepcopy(board)
-            board_copy.drop_piece(col, opponent)
-            _, new_score = minimax(board_copy, depth - 1, alpha, beta, True, ai_player)
+        for move in legal_moves:
+            _, new_score = _minimax(
+                state.apply(move), depth - 1, alpha, beta, True, ai_player, heuristic_fn
+            )
             if new_score < value:
-                value = new_score
-                best_col = col
+                value, best_move = new_score, move
             beta = min(beta, value)
             if alpha >= beta:
-                break  # prune
-        return best_col, value
+                break
+        return best_move, value
 
 
-def find_best_move(board, ai_player, depth=5):
-    """The function the rest of the app will actually call."""
-    best_col, _ = minimax(board, depth, -math.inf, math.inf, True, ai_player)
-    return best_col
+def find_best_move(
+    state: GameState,
+    ai_player: int,
+    heuristic_fn: HeuristicFn,
+    depth: int = 5,
+) -> Any:
+    """The function the rest of the app calls. Returns the chosen move."""
+    best_move, _ = _minimax(state, depth, -math.inf, math.inf, True, ai_player, heuristic_fn)
+    return best_move
