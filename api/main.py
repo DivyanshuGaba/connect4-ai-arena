@@ -12,6 +12,7 @@ from games.connect4.heuristics import score_position
 from ai.minimax import find_best_move
 from db.session import get_session, init_db
 from db import repository
+from multiplayer.connection_manager import ConnectionManager, GameSession, RECONNECT_WINDOW_SECONDS
 
 
 @asynccontextmanager
@@ -35,6 +36,10 @@ live_games: dict[str, Connect4State] = {}
 # Move count per game, tracked alongside live_games so we don't need a DB
 # round trip just to number the next move.
 live_move_counts: dict[str, int] = {}
+
+# Tracks live human-vs-human games: seats, tokens, WebSocket connections,
+# and disconnect/forfeit timers. See multiplayer/connection_manager.py.
+manager = ConnectionManager()
 
 
 class MoveRequest(BaseModel):
@@ -217,3 +222,131 @@ async def watch_game(websocket: WebSocket, game_id: str):
         "message": f"Player {winner} wins!" if winner else "It's a draw!",
     })
     await websocket.close()
+
+
+@app.post("/game/new/pvp")
+async def new_pvp_game():
+    """
+    Create a human-vs-human game. Returns a game_id to share with your
+    opponent and a secret token proving you own seat 1 -- keep it, you'll
+    need it to connect to the WebSocket and to reconnect if you drop.
+    """
+    game_id = str(uuid.uuid4())
+    state = Connect4State()
+    live_games[game_id] = state
+    live_move_counts[game_id] = 0
+
+    session = manager.create_session(game_id, state)
+
+    async with get_session() as db:
+        await repository.create_game(db, game_id, player_one_kind="human", player_two_kind="human")
+
+    return {"game_id": game_id, "seat": 1, "token": session.tokens[1]}
+
+
+@app.post("/game/{game_id}/join")
+async def join_pvp_game(game_id: str):
+    """Claim seat 2 of an existing PvP game. Returns a secret token for that seat."""
+    session = manager.get_session(game_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    token = manager.join(session)
+    if token is None:
+        raise HTTPException(status_code=400, detail="Game already has two players")
+
+    return {"game_id": game_id, "seat": 2, "token": token}
+
+
+@app.websocket("/game/{game_id}/play")
+async def play_pvp_game(websocket: WebSocket, game_id: str, token: str):
+    """
+    Human vs human, in real time. Connect with ?token=<your seat token>,
+    the one you got from /game/new/pvp or /game/{game_id}/join.
+
+    Send moves as {"action": "move", "col": <int>}. If your connection
+    drops, you have RECONNECT_WINDOW_SECONDS to reconnect with the same
+    token before it counts as a forfeit for your opponent.
+    """
+    session = manager.get_session(game_id)
+    if session is None:
+        await websocket.close(code=4404, reason="Game not found")
+        return
+
+    seat = session.seat_for_token(token)
+    if seat is None:
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+
+    if session.connections[seat] is not None:
+        await websocket.close(code=4409, reason="This seat is already connected elsewhere")
+        return
+
+    await manager.connect(session, seat, websocket)
+
+    # Always send a fresh snapshot on connect -- covers both a first join
+    # and a reconnect after missing moves made while disconnected.
+    await websocket.send_json({"event": "sync", "seat": seat, **state_to_dict(game_id, session.state)})
+
+    opponent_seat = session.opponent_seat(seat)
+    if session.connections[opponent_seat] is not None:
+        await manager.send_to_seat(session, opponent_seat, {"event": "opponent_connected"})
+
+    async def on_forfeit(session: GameSession, forfeiting_seat: int):
+        session.finished = True
+        winner = session.opponent_seat(forfeiting_seat)
+        async with get_session() as db:
+            await repository.finish_game(db, game_id, winner=winner)
+        await manager.send_to_seat(session, winner, {
+            "event": "end",
+            "winner": winner,
+            "reason": "forfeit",
+            "message": "Your opponent didn't reconnect in time -- you win by forfeit.",
+        })
+        manager.cleanup(game_id)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            if data.get("action") != "move":
+                continue
+
+            async with session.lock:
+                if session.finished:
+                    continue
+                if session.state.current_player != seat:
+                    await websocket.send_json({"event": "error", "message": "Not your turn"})
+                    continue
+
+                col = data.get("col")
+                if col not in session.state.legal_moves():
+                    await websocket.send_json({"event": "error", "message": "Invalid move"})
+                    continue
+
+                new_state = await _apply_and_persist(game_id, session.state, col, player=seat)
+                session.state = new_state
+
+                await manager.broadcast(session, {
+                    "event": "move", "player": seat, "col": col,
+                    **state_to_dict(game_id, new_state),
+                })
+
+                if new_state.result() is not None:
+                    session.finished = True
+                    winner = new_state.winner()
+                    await manager.broadcast(session, {
+                        "event": "end",
+                        "winner": winner,
+                        "message": f"Player {winner} wins!" if winner else "It's a draw!",
+                    })
+                    manager.cleanup(game_id)
+
+    except WebSocketDisconnect:
+        if session.finished:
+            return
+        await manager.send_to_seat(session, opponent_seat, {
+            "event": "opponent_disconnected",
+            "reconnect_window_seconds": RECONNECT_WINDOW_SECONDS,
+        })
+        manager.start_forfeit_countdown(session, seat, on_forfeit)
