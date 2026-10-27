@@ -1,12 +1,12 @@
 # Connect 4 AI Arena
 
-> 🎮 **Play the game:** https://divyanshugaba.github.io/connect4-ai-arena
-> 
-> 📡 **Live API docs:** https://connect4-ai-arena.onrender.com/docs
-> 
-> *(Free tier backend — may take ~50 seconds to wake up on first request)*
+> 🎮 **Play the game:** https://d2fmd88qcyvnzc.cloudfront.net
+>
+> 📡 **Live API docs:** https://api.connect4ai.com/docs
+>
+> *(Also mirrored on GitHub Pages: https://divyanshugaba.github.io/connect4-ai-arena)*
 
-A game-playing AI built from scratch in Python. Implements two approaches to the same problem — Minimax with alpha-beta pruning and Monte Carlo Tree Search (MCTS) — served through a FastAPI backend with real-time WebSocket streaming so you can watch the AI think move by move.
+A game-playing AI built from scratch in Python. Implements two approaches to the same problem, Minimax with alpha-beta pruning and Monte Carlo Tree Search (MCTS), served through a FastAPI backend with real-time WebSocket streaming so you can watch the AI think move by move. Deployed on AWS.
 
 ---
 
@@ -21,10 +21,10 @@ A game-playing AI built from scratch in Python. Implements two approaches to the
 
 ## What this project demonstrates
 
-- **Algorithms** — Minimax + alpha-beta pruning, MCTS with UCB1 selection, custom heuristic evaluation
-- **API design** — FastAPI REST endpoints + WebSocket live streaming
-- **Software engineering** — clean separation of engine / AI / API layers, pytest test suite, feature-branch git workflow with verified commits
-- **Deployment** — Dockerized, CI via GitHub Actions, backend on Render, frontend on GitHub Pages
+- **Algorithms:** Minimax + alpha-beta pruning, MCTS with UCB1 selection, custom heuristic evaluation
+- **API design:** FastAPI REST endpoints + WebSocket live streaming
+- **Software engineering:** clean separation of engine / AI / API layers, pytest test suite, feature-branch git workflow with verified commits
+- **Cloud deployment:** Dockerized backend on AWS (EC2, RDS, S3, CloudFront, Secrets Manager, CloudWatch), custom domain with HTTPS, CI via GitHub Actions
 
 ---
 
@@ -38,7 +38,7 @@ All benchmarks run over 20 games on an M1 MacBook Pro.
 | MCTS (500 iter) vs Random | 20 | 0 | 0 | 0.679s |
 | Minimax (depth 4) vs MCTS (500 iter) | 20 | 0 | 0 | 0.193s |
 
-**Key insight:** Minimax with a well-tuned heuristic outperforms MCTS at 500 iterations — both in win rate and speed (6x faster). MCTS needs significantly more iterations (5000+) to compete, at which point it becomes slower but more general since it requires no hand-crafted heuristic.
+**Key insight:** Minimax with a well-tuned heuristic outperforms MCTS at 500 iterations, both in win rate and speed (6x faster). MCTS needs significantly more iterations (5000+) to compete, at which point it becomes slower but more general since it requires no hand-crafted heuristic.
 
 ---
 
@@ -57,9 +57,10 @@ connect4-ai-arena/
 ├── api/                         # FastAPI backend
 │   ├── main.py                  # REST endpoints + WebSocket streaming
 │   └── __init__.py
-├── frontend/                    # Web UI
+├── docs/                        # Web UI (served by S3/CloudFront and GitHub Pages)
 │   ├── index.html               # Canvas board
-│   └── app.js                   # Game logic, API calls, WebSocket client
+│   ├── app.js                   # Game logic, API calls, WebSocket client
+│   └── replay.html              # Game replay viewer
 ├── tests/
 │   └── test_board.py            # 9 pytest unit tests
 ├── benchmark.py                 # Algorithm benchmarking script
@@ -69,7 +70,7 @@ connect4-ai-arena/
 ├── docker-compose.yml
 ├── pytest.ini
 ├── requirements.txt
-└── .github/workflows/tests.yml  # CI — runs on every push to main
+└── .github/workflows/tests.yml  # CI: runs on every push to main
 ```
 
 ---
@@ -83,7 +84,7 @@ connect4-ai-arena/
 | POST | `/game/{id}/move` | Make a move (AI responds automatically) |
 | WS | `/game/{id}/watch` | Stream live AI vs AI game |
 
-Full interactive docs: https://connect4-ai-arena.onrender.com/docs
+Full interactive docs: https://api.connect4ai.com/docs
 
 ---
 
@@ -98,7 +99,7 @@ pip install -r requirements.txt
 uvicorn api.main:app --reload
 ```
 
-Then open `frontend/index.html` with Live Server in VS Code.
+Then open `docs/index.html` with Live Server in VS Code. To make the frontend talk to your local backend, change the `API` constant at the top of `docs/app.js` to `http://localhost:8000` (it points at the live AWS backend by default).
 
 **Or with Docker:**
 ```bash
@@ -129,12 +130,50 @@ python3 play_cli.py
 | Language | Python 3.12 |
 | API | FastAPI + WebSockets |
 | AI | Minimax, Alpha-Beta Pruning, MCTS |
+| Data | PostgreSQL (AWS RDS), Redis (Upstash) |
 | Frontend | HTML5 Canvas, Vanilla JS |
 | Testing | pytest |
 | Containerisation | Docker + Docker Compose |
 | CI | GitHub Actions |
-| Backend deployment | Render (free tier) |
-| Frontend deployment | GitHub Pages |
+| Backend deployment | AWS EC2 + Nginx + Let's Encrypt |
+| Frontend deployment | AWS S3 + CloudFront (mirrored on GitHub Pages) |
+
+---
+
+## AWS Deployment
+
+The backend and frontend run on AWS, deployed and configured by hand through the console and SSH.
+
+### Architecture
+
+```
+Browser
+  -> CloudFront (HTTPS CDN) -> S3 (static frontend)
+  -> api.connect4ai.com (HTTPS, Let's Encrypt)
+       -> EC2 t3.micro (Amazon Linux 2023)
+            -> Nginx reverse proxy (HTTP and WebSocket upgrade)
+                 -> Docker container (FastAPI + Uvicorn on port 8000)
+                      -> RDS PostgreSQL (private, reachable only from the EC2 security group)
+                      -> Upstash Redis (matchmaking and game state)
+```
+
+### What is used
+
+- **EC2:** single t3.micro instance running the backend in Docker with an automatic restart policy
+- **RDS PostgreSQL:** managed database, public access disabled, access limited by security group
+- **S3 + CloudFront:** static frontend hosting with Origin Access Control, so the bucket is not public
+- **Nginx + Certbot:** reverse proxy with free auto-renewing SSL certificates (cron renewal)
+- **DNS:** GoDaddy A record pointing api.connect4ai.com at the EC2 public IP
+- **Secrets Manager:** DATABASE_URL and REDIS_URL are fetched at container launch using an IAM role attached to the instance, so no credentials are stored in commands, code, or the repo
+- **IAM:** role for the instance with only the permissions it needs (Secrets Manager read, CloudWatch logging)
+- **CloudWatch:** container logs streamed to a log group, plus alarms for failed status checks and CPU above 80 percent, delivered by email through SNS
+- **AWS Budgets:** monthly cost alert
+
+### Design notes
+
+- Security groups act as the firewall: only SSH (from my IP), HTTP, and HTTPS are open to the internet; the database accepts traffic only from the backend instance.
+- An HTTPS frontend cannot call an HTTP backend (browser mixed content rules), which is why the API has its own domain and certificate.
+- The deployment is single instance by design to stay within free tier and credits. Scaling out would add an Application Load Balancer and an Auto Scaling group.
 
 ---
 
@@ -153,7 +192,8 @@ python3 play_cli.py
 - [x] Algorithm benchmark (Minimax vs MCTS vs Random)
 - [x] Docker + docker-compose
 - [x] GitHub Actions CI pipeline
-- [x] Live backend deployment (Render)
-- [x] Live frontend deployment (GitHub Pages)
+- [x] Frontend deployment (GitHub Pages)
+- [x] AWS deployment (EC2, RDS, S3, CloudFront, HTTPS custom domain)
+- [x] Secrets Manager for credentials, CloudWatch logs and alarms
 - [ ] Self-play neural network agent (stretch goal)
 - [ ] Frontend UI polish (animations, piece drop effect)
