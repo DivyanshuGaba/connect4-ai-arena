@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Connect 4 AI Arena — Replay</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --p1: #e63946;
+      --p2: #2196f3;
+      --win: #ffd60a;
+      --bg: #07080f;
+      --board-bg: #0e1628;
+      --text: #e8eaf6;
+      --label: #546e8a;
+      --muted: #3d5068;
+      --border: #1a2640;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    a { color: var(--p2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    header { text-align: center; margin-bottom: 1.25rem; }
+
+    h1 {
+      font-size: clamp(1rem, 4vw, 1.5rem);
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--p1);
+      margin-bottom: 0.3rem;
+    }
+
+    .subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(0.55rem, 2vw, 0.7rem);
+      color: var(--label);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .nav-link { margin-top: 0.6rem; font-size: 0.75rem; }
+
+    .layout {
+      width: 100%;
+      max-width: 920px;
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .panel {
+      background: var(--board-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+
+    .sidebar {
+      width: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel h2 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--label);
+      margin-bottom: 0.6rem;
+    }
+
+    .load-row { display: flex; gap: 0.4rem; margin-bottom: 0.2rem; }
+
+    input[type=text] {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      padding: 0.5rem 0.6rem;
+      min-width: 0;
+    }
+
+    button {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(0.68rem, 2.5vw, 0.76rem);
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.55rem 1rem;
+      border-radius: 2rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--label);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:hover:not(:disabled) { border-color: var(--p1); color: var(--p1); }
+    button:disabled { opacity: 0.35; cursor: default; }
+
+    .game-list, .leaderboard-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; max-height: 260px; overflow-y: auto; }
+
+    .game-list li, .leaderboard-list li {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: #a8b8cc;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      cursor: default;
+    }
+
+    .game-list li { cursor: pointer; border: 1px solid transparent; }
+    .game-list li:hover { border-color: var(--border); background: rgba(255,255,255,0.03); }
+
+    .result-badge { flex-shrink: 0; font-size: 0.6rem; padding: 0.1rem 0.4rem; border-radius: 4px; }
+    .result-badge.p1 { background: rgba(230,57,70,0.15); color: var(--p1); }
+    .result-badge.p2 { background: rgba(33,150,243,0.15); color: var(--p2); }
+    .result-badge.draw { background: rgba(84,110,138,0.2); color: var(--label); }
+    .result-badge.live { background: rgba(255,214,10,0.12); color: var(--win); }
+
+    .rank { color: var(--muted); width: 1.4rem; flex-shrink: 0; }
+    .elo { color: var(--win); font-weight: 500; }
+
+    .board-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      min-width: 320px;
+    }
+
+    .canvas-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; align-items: center; }
+
+    canvas { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--border); }
+
+    .move-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-top: 1rem;
+    }
+
+    .move-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--label);
+      min-width: 5.5rem;
+      text-align: center;
+    }
+
+    #status {
+      margin-top: 0.9rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(0.65rem, 2.2vw, 0.75rem);
+      color: var(--label);
+      letter-spacing: 0.05em;
+      min-height: 1.2rem;
+      text-align: center;
+      padding: 0 1rem;
+    }
+
+    #status.win  { color: var(--win); font-weight: 500; }
+    #status.lose { color: var(--p2); }
+
+    .empty-note { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Connect 4 AI Arena</h1>
+    <p class="subtitle">Replay &amp; Leaderboard</p>
+    <p class="nav-link"><a href="index.html">&larr; Back to the game</a></p>
+  </header>
+
+  <div class="layout">
+
+    <div class="panel sidebar">
+      <div>
+        <h2>Load a Game</h2>
+        <div class="load-row">
+          <input type="text" id="game-id-input" placeholder="paste a game id" />
+          <button id="btn-load">Load</button>
+        </div>
+      </div>
+
+      <div>
+        <h2>Recent Games</h2>
+        <ul class="game-list" id="game-list"><li class="empty-note">Loading...</li></ul>
+      </div>
+
+      <div>
+        <h2>Leaderboard</h2>
+        <ul class="leaderboard-list" id="leaderboard-list"><li class="empty-note">Loading...</li></ul>
+      </div>
+    </div>
+
+    <div class="panel board-area">
+      <div class="canvas-wrap">
+        <canvas id="board"></canvas>
+      </div>
+
+      <div class="move-controls">
+        <button id="btn-first" title="First move">&laquo;</button>
+        <button id="btn-prev" title="Previous move">&lsaquo; Prev</button>
+        <span class="move-counter" id="move-counter">— / —</span>
+        <button id="btn-next" title="Next move">Next &rsaquo;</button>
+        <button id="btn-last" title="Last move">&raquo;</button>
+        <button id="btn-play" title="Auto-play">&#9654;</button>
+      </div>
+
+      <div id="status">Pick a game from the list, or paste a game id above</div>
+    </div>
+
+  </div>
+
+  <script>
+    const canvas   = document.getElementById('board');
+    const ctx      = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const COLS = 7, ROWS = 6;
+    const API = 'https://connect4-ai-arena.onrender.com';
+
+    const C = {
+      boardBg: '#0e1628', hole: '#07080f',
+      p1: '#e63946', p2: '#2196f3', win: '#ffd60a',
+    };
+
+    let CELL, RADIUS;
+    let grids = [emptyGrid()]; // grid snapshots: index 0 is the empty board, then one per move
+    let moveMeta = [];   // {move_number, player, column} aligned with grids[1:]
+    let gameMeta = null; // {game_id, winner, created_at, finished_at}
+    let cursor = 0;      // which snapshot in `grids` is on screen
+    let playTimer = null;
+
+    function emptyGrid() {
+      return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    }
+
+    function resize() {
+      const maxW = Math.min(window.innerWidth - 32, 480);
+      CELL   = Math.floor(maxW / COLS);
+      RADIUS = Math.floor(CELL * 0.37);
+      canvas.width  = CELL * COLS;
+      canvas.height = CELL * ROWS;
+      drawBoard();
+    }
+
+    function findWinCells(g) {
+      const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = g[r][c];
+          if (!p) continue;
+          for (const [dr, dc] of dirs) {
+            const cells = [];
+            for (let i = 0; i < 4; i++) {
+              const nr = r + i*dr, nc = c + i*dc;
+              if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) break;
+              if (g[nr][nc] !== p) break;
+              cells.push([nr, nc]);
+            }
+            if (cells.length === 4) return cells;
+          }
+        }
+      }
+      return [];
+    }
+
+    function drawBoard() {
+      if (!CELL) return;
+      const g = grids[cursor] || emptyGrid();
+      const isLastMove = cursor === grids.length - 1;
+      const winCells = (isLastMove && gameMeta && gameMeta.winner) ? findWinCells(g) : [];
+
+      ctx.fillStyle = C.boardBg;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(0, 0, canvas.width, canvas.height, 10);
+      else ctx.rect(0, 0, canvas.width, canvas.height);
+      ctx.fill();
+
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const x = c*CELL + CELL/2, y = r*CELL + CELL/2;
+          ctx.beginPath();
+          ctx.arc(x, y, RADIUS+3, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.fill();
+
+          const val = g[r][c];
+          const isWin = winCells.some(([wr,wc]) => wr===r && wc===c);
+          ctx.beginPath();
+          ctx.arc(x, y, RADIUS, 0, Math.PI*2);
+          ctx.fillStyle = !val ? C.hole : isWin ? C.win : val === 1 ? C.p1 : C.p2;
+          ctx.fill();
+        }
+      }
+    }
+
+    function updateControls() {
+      const total = grids.length - 1; // number of moves (grids[0] is the empty start)
+      document.getElementById('move-counter').textContent = `${cursor} / ${total}`;
+      document.getElementById('btn-first').disabled = cursor === 0;
+      document.getElementById('btn-prev').disabled = cursor === 0;
+      document.getElementById('btn-next').disabled = cursor === total;
+      document.getElementById('btn-last').disabled = cursor === total;
+      document.getElementById('btn-play').disabled = total === 0;
+
+      if (cursor === 0) {
+        setStatus('Start of game');
+      } else {
+        const mv = moveMeta[cursor - 1];
+        const who = mv.player === 1 ? 'Player 1' : 'Player 2';
+        setStatus(`Move ${mv.move_number}: ${who} played column ${mv.column}`);
+      }
+      if (cursor === total && gameMeta) {
+        if (gameMeta.winner === 1 || gameMeta.winner === 2) {
+          setStatus(`Player ${gameMeta.winner} wins!`, gameMeta.winner === 1 ? 'win' : 'lose');
+        } else if (gameMeta.winner === 0) {
+          setStatus("It's a draw!");
+        } else if (!gameMeta.finished_at) {
+          setStatus('Game still in progress (showing moves played so far)');
+        }
+      }
+    }
+
+    function setStatus(msg, cls) {
+      statusEl.textContent = msg;
+      statusEl.className = cls || '';
+    }
+
+    function stopAutoplay() {
+      if (playTimer) { clearInterval(playTimer); playTimer = null; }
+      document.getElementById('btn-play').textContent = '\u25B6';
+    }
+
+    function goTo(i) {
+      cursor = Math.max(0, Math.min(grids.length - 1, i));
+      drawBoard();
+      updateControls();
+    }
+
+    async function loadGame(gameId) {
+      stopAutoplay();
+      setStatus('Loading...');
+      try {
+        const res = await fetch(`${API}/game/${gameId}/moves`);
+        if (!res.ok) { setStatus('Game not found'); return; }
+        const data = await res.json();
+
+        gameMeta = { game_id: data.game_id, winner: data.winner, created_at: data.created_at, finished_at: data.finished_at };
+        moveMeta = data.moves.map(m => ({ move_number: m.move_number, player: m.player, column: m.column }));
+        grids = [emptyGrid(), ...data.moves.map(m => m.grid_after)];
+        cursor = grids.length - 1; // jump straight to the final position
+
+        document.getElementById('game-id-input').value = gameId;
+        drawBoard();
+        updateControls();
+      } catch (e) {
+        setStatus('Could not reach server — may be waking up, try again in 30s');
+      }
+    }
+
+    async function loadRecentGames() {
+      const list = document.getElementById('game-list');
+      try {
+        const res = await fetch(`${API}/games?limit=20`);
+        const games = await res.json();
+        if (!games.length) { list.innerHTML = '<li class="empty-note">No games played yet</li>'; return; }
+
+        list.innerHTML = '';
+        games.forEach(g => {
+          const li = document.createElement('li');
+          const idLabel = document.createElement('span');
+          idLabel.textContent = g.game_id.slice(0, 8) + '…';
+
+          const badge = document.createElement('span');
+          if (!g.finished_at) { badge.textContent = 'live'; badge.className = 'result-badge live'; }
+          else if (g.winner === 1) { badge.textContent = 'P1'; badge.className = 'result-badge p1'; }
+          else if (g.winner === 2) { badge.textContent = 'P2'; badge.className = 'result-badge p2'; }
+          else { badge.textContent = 'draw'; badge.className = 'result-badge draw'; }
+
+          li.appendChild(idLabel);
+          li.appendChild(badge);
+          li.addEventListener('click', () => loadGame(g.game_id));
+          list.appendChild(li);
+        });
+      } catch (e) {
+        list.innerHTML = '<li class="empty-note">Could not reach server</li>';
+      }
+    }
+
+    async function loadLeaderboard() {
+      const list = document.getElementById('leaderboard-list');
+      try {
+        const res = await fetch(`${API}/leaderboard`);
+        const rows = await res.json();
+        if (!rows.length) { list.innerHTML = '<li class="empty-note">No rated players yet</li>'; return; }
+
+        list.innerHTML = '';
+        rows.forEach((row, i) => {
+          const li = document.createElement('li');
+          const rank = document.createElement('span');
+          rank.className = 'rank';
+          rank.textContent = `#${i + 1}`;
+          const name = document.createElement('span');
+          name.style.flex = '1';
+          name.textContent = row.username;
+          const elo = document.createElement('span');
+          elo.className = 'elo';
+          elo.textContent = row.elo;
+          li.appendChild(rank);
+          li.appendChild(name);
+          li.appendChild(elo);
+          list.appendChild(li);
+        });
+      } catch (e) {
+        list.innerHTML = '<li class="empty-note">Could not reach server</li>';
+      }
+    }
+
+    document.getElementById('btn-load').addEventListener('click', () => {
+      const id = document.getElementById('game-id-input').value.trim();
+      if (id) loadGame(id);
+    });
+    document.getElementById('game-id-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('btn-load').click();
+    });
+
+    document.getElementById('btn-first').addEventListener('click', () => { stopAutoplay(); goTo(0); });
+    document.getElementById('btn-prev').addEventListener('click', () => { stopAutoplay(); goTo(cursor - 1); });
+    document.getElementById('btn-next').addEventListener('click', () => { stopAutoplay(); goTo(cursor + 1); });
+    document.getElementById('btn-last').addEventListener('click', () => { stopAutoplay(); goTo(grids.length - 1); });
+
+    document.getElementById('btn-play').addEventListener('click', (e) => {
+      if (playTimer) { stopAutoplay(); return; }
+      if (cursor >= grids.length - 1) goTo(0);
+      e.target.textContent = '\u23F8';
+      playTimer = setInterval(() => {
+        if (cursor >= grids.length - 1) { stopAutoplay(); return; }
+        goTo(cursor + 1);
+      }, 700);
+    });
+
+    window.addEventListener('resize', resize);
+    resize();
+    drawBoard();
+    updateControls();
+    loadRecentGames();
+    loadLeaderboard();
+  </script>
+</body>
+</html>

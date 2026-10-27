@@ -13,6 +13,7 @@ from ai.minimax import find_best_move
 from db.session import get_session, init_db
 from db import repository
 from multiplayer.connection_manager import ConnectionManager, GameSession, RECONNECT_WINDOW_SECONDS
+from multiplayer import redis_bus
 
 
 @asynccontextmanager
@@ -44,6 +45,14 @@ manager = ConnectionManager()
 
 class MoveRequest(BaseModel):
     col: int
+
+
+class NewPvpRequest(BaseModel):
+    username: str
+
+
+class JoinPvpRequest(BaseModel):
+    username: str
 
 
 def ai_move(state: Connect4State, ai_player: int, depth: int) -> int:
@@ -225,11 +234,15 @@ async def watch_game(websocket: WebSocket, game_id: str):
 
 
 @app.post("/game/new/pvp")
-async def new_pvp_game():
+async def new_pvp_game(req: NewPvpRequest):
     """
     Create a human-vs-human game. Returns a game_id to share with your
     opponent and a secret token proving you own seat 1 -- keep it, you'll
     need it to connect to the WebSocket and to reconnect if you drop.
+
+    `username` claims an identity for Elo/leaderboard purposes -- there's
+    no password or login, so this is just "the name you're playing under,"
+    not an authenticated account.
     """
     game_id = str(uuid.uuid4())
     state = Connect4State()
@@ -240,12 +253,16 @@ async def new_pvp_game():
 
     async with get_session() as db:
         await repository.create_game(db, game_id, player_one_kind="human", player_two_kind="human")
+        user = await repository.get_or_create_user(db, req.username)
 
-    return {"game_id": game_id, "seat": 1, "token": session.tokens[1]}
+    session.player_ids[1] = user.id
+    session.usernames[1] = user.username
+
+    return {"game_id": game_id, "seat": 1, "token": session.tokens[1], "elo": user.elo}
 
 
 @app.post("/game/{game_id}/join")
-async def join_pvp_game(game_id: str):
+async def join_pvp_game(game_id: str, req: JoinPvpRequest):
     """Claim seat 2 of an existing PvP game. Returns a secret token for that seat."""
     session = manager.get_session(game_id)
     if session is None:
@@ -255,7 +272,21 @@ async def join_pvp_game(game_id: str):
     if token is None:
         raise HTTPException(status_code=400, detail="Game already has two players")
 
-    return {"game_id": game_id, "seat": 2, "token": token}
+    async with get_session() as db:
+        user = await repository.get_or_create_user(db, req.username)
+        session.player_ids[2] = user.id
+        session.usernames[2] = user.username
+        await repository.set_game_players(db, game_id, session.player_ids[1], session.player_ids[2])
+
+    return {"game_id": game_id, "seat": 2, "token": token, "elo": user.elo}
+
+
+@app.get("/leaderboard")
+async def leaderboard(limit: int = 20):
+    """Top players by Elo rating, highest first."""
+    async with get_session() as session:
+        users = await repository.get_leaderboard(session, limit=limit)
+    return [{"username": u.username, "elo": u.elo} for u in users]
 
 
 @app.websocket("/game/{game_id}/play")
@@ -284,8 +315,10 @@ async def play_pvp_game(websocket: WebSocket, game_id: str, token: str):
 
     await manager.connect(session, seat, websocket)
 
-    # Always send a fresh snapshot on connect -- covers both a first join
-    # and a reconnect after missing moves made while disconnected.
+
+    relay_task = asyncio.create_task(manager.relay_subscription(session, seat))
+
+  
     await websocket.send_json({"event": "sync", "seat": seat, **state_to_dict(game_id, session.state)})
 
     opponent_seat = session.opponent_seat(seat)
@@ -295,14 +328,23 @@ async def play_pvp_game(websocket: WebSocket, game_id: str, token: str):
     async def on_forfeit(session: GameSession, forfeiting_seat: int):
         session.finished = True
         winner = session.opponent_seat(forfeiting_seat)
+        new_elo = None
         async with get_session() as db:
             await repository.finish_game(db, game_id, winner=winner)
-        await manager.send_to_seat(session, winner, {
+            new_elo = await repository.apply_elo_update(
+                db, session.player_ids[1], session.player_ids[2], winner_seat=winner
+            )
+        end_message = {
             "event": "end",
             "winner": winner,
             "reason": "forfeit",
             "message": "Your opponent didn't reconnect in time -- you win by forfeit.",
-        })
+        }
+        if new_elo is not None:
+            end_message["elo"] = {"1": new_elo[0], "2": new_elo[1]}
+        # Direct send: the forfeiting seat's socket is already gone, so this
+        # only reaches the winner, who is still connected.
+        await manager.send_to_seat(session, winner, end_message)
         manager.cleanup(game_id)
 
     try:
@@ -335,11 +377,19 @@ async def play_pvp_game(websocket: WebSocket, game_id: str, token: str):
                 if new_state.result() is not None:
                     session.finished = True
                     winner = new_state.winner()
-                    await manager.broadcast(session, {
+                    new_elo = None
+                    async with get_session() as db:
+                        new_elo = await repository.apply_elo_update(
+                            db, session.player_ids[1], session.player_ids[2], winner_seat=winner
+                        )
+                    end_message = {
                         "event": "end",
                         "winner": winner,
                         "message": f"Player {winner} wins!" if winner else "It's a draw!",
-                    })
+                    }
+                    if new_elo is not None:
+                        end_message["elo"] = {"1": new_elo[0], "2": new_elo[1]}
+                    await manager.broadcast(session, end_message)
                     manager.cleanup(game_id)
 
     except WebSocketDisconnect:
@@ -350,3 +400,105 @@ async def play_pvp_game(websocket: WebSocket, game_id: str, token: str):
             "reconnect_window_seconds": RECONNECT_WINDOW_SECONDS,
         })
         manager.start_forfeit_countdown(session, seat, on_forfeit)
+    finally:
+        relay_task.cancel()
+
+
+async def _start_matched_game(ticket_a: dict, ticket_b: dict) -> dict:
+    """
+    Creates the PvP game + session for a pair the matchmaking queue just
+    formed, registers both players for Elo, and returns everything needed
+    to tell each side which seat/token is theirs. ticket_a/ticket_b are the
+    {"ticket_id", "username"} dicts the queue handed back.
+    """
+    game_id = str(uuid.uuid4())
+    state = Connect4State()
+    live_games[game_id] = state
+    live_move_counts[game_id] = 0
+
+    session = manager.create_session(game_id, state)
+    session.tokens[2] = uuid.uuid4().hex  # create_session only hands out seat 1's token
+
+    async with get_session() as db:
+        await repository.create_game(db, game_id, player_one_kind="human", player_two_kind="human")
+        user_a = await repository.get_or_create_user(db, ticket_a["username"])
+        user_b = await repository.get_or_create_user(db, ticket_b["username"])
+        await repository.set_game_players(db, game_id, user_a.id, user_b.id)
+
+    session.player_ids[1], session.usernames[1] = user_a.id, user_a.username
+    session.player_ids[2], session.usernames[2] = user_b.id, user_b.username
+
+    return {
+        "game_id": game_id,
+        "seats": {
+            ticket_a["ticket_id"]: {"seat": 1, "token": session.tokens[1], "elo": user_a.elo},
+            ticket_b["ticket_id"]: {"seat": 2, "token": session.tokens[2], "elo": user_b.elo},
+        },
+    }
+
+
+@app.websocket("/matchmaking/queue")
+async def matchmaking_queue(websocket: WebSocket, username: str):
+    """
+    Join the Redis-backed matchmaking queue. Connect with ?username=<name>.
+
+    If another waiting player is found immediately, both sides are sent a
+    `matched` message right away with the game_id/seat/token to connect to
+    /game/{game_id}/play with. Otherwise this connection waits -- listening
+    for either a match (published by whichever later player pairs with us)
+    or the client giving up by disconnecting -- and leaves the queue in
+    either case.
+    """
+    await websocket.accept()
+    ticket_id = str(uuid.uuid4())
+
+    try:
+        pair = await redis_bus.join_matchmaking_queue(ticket_id, username)
+
+        if pair is not None:
+            ticket_a, ticket_b = pair
+            mine, theirs = (ticket_a, ticket_b) if ticket_a["ticket_id"] == ticket_id else (ticket_b, ticket_a)
+
+            match = await _start_matched_game(ticket_a, ticket_b)
+
+          
+            await redis_bus.publish(
+                redis_bus.matchmaking_channel(theirs["ticket_id"]),
+                {"event": "matched", "game_id": match["game_id"], **match["seats"][theirs["ticket_id"]]},
+            )
+
+            await websocket.send_json({
+                "event": "matched", "game_id": match["game_id"], **match["seats"][mine["ticket_id"]],
+            })
+            await websocket.close()
+            return
+
+   
+        async with redis_bus.ChannelSubscriber(redis_bus.matchmaking_channel(ticket_id)) as sub:
+            listen_iter = sub.listen()
+
+            async def wait_for_match():
+                async for message in listen_iter:
+                    return message
+
+            match_task = asyncio.create_task(wait_for_match())
+            disconnect_task = asyncio.create_task(websocket.receive_text())
+
+            done, pending = await asyncio.wait(
+                {match_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+
+            if match_task in done and not match_task.cancelled():
+                await websocket.send_json(match_task.result())
+                await websocket.close()
+            # else: the client disconnected (or sent something unexpected)
+            # before being matched -- just fall through to cleanup below.
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        # Safe even if we were already matched and popped off the queue --
+        # removing a ticket that isn't there is a no-op.
+        await redis_bus.leave_matchmaking_queue(ticket_id, username)

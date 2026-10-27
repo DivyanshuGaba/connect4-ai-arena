@@ -4,6 +4,8 @@ from typing import Callable, Optional
 
 from fastapi import WebSocket
 
+from multiplayer import redis_bus
+
 RECONNECT_WINDOW_SECONDS = 45
 
 
@@ -15,6 +17,15 @@ class GameSession:
         self.tokens: dict[int, Optional[str]] = {1: None, 2: None}
         self.connections: dict[int, Optional[WebSocket]] = {1: None, 2: None}
         self.disconnect_tasks: dict[int, Optional[asyncio.Task]] = {1: None, 2: None}
+
+        # User id (from db/models.py) and display name per seat, set once
+        # both players are known (direct PvP join, or matchmaking). None
+        # for a seat that isn't a registered user -- an AI, or (for the
+        # older /game/new/pvp + /join flow prior to this step) an
+        # anonymous player with no username on file. Elo only updates when
+        # both seats have a player_id.
+        self.player_ids: dict[int, Optional[int]] = {1: None, 2: None}
+        self.usernames: dict[int, Optional[str]] = {1: None, 2: None}
 
         # Serializes move handling so two near-simultaneous messages can't
         # both be applied to the same state at once.
@@ -93,8 +104,29 @@ class ConnectionManager:
                 pass  # the disconnect handler in the endpoint will deal with this
 
     async def broadcast(self, session: GameSession, message: dict) -> None:
-        for seat in (1, 2):
-            await self.send_to_seat(session, seat, message)
+        """
+        Publish a game event (a move, game-over, opponent connected/
+        disconnected) to this game's Redis channel. It is NOT sent directly
+        to the two local WebSocket objects here -- every connected seat's
+        websocket handler is independently subscribed to the same channel
+        (see relay_subscription below) and forwards whatever it receives to
+        its own socket. That's what makes broadcast delivery correct even
+        if the two seats' connections are being served by different worker
+        processes: nothing here assumes "the other player's socket is in my
+        memory."
+        """
+        await redis_bus.publish(redis_bus.game_channel(session.game_id), message)
+
+    async def relay_subscription(self, session: GameSession, seat: int) -> None:
+        """
+        Runs for the lifetime of one seat's WebSocket connection: subscribes
+        to this game's Redis channel and forwards every published message
+        to that seat's own socket. Call this as a background task right
+        after connect(); cancel it when the connection closes.
+        """
+        async with redis_bus.ChannelSubscriber(redis_bus.game_channel(session.game_id)) as sub:
+            async for message in sub.listen():
+                await self.send_to_seat(session, seat, message)
 
     def cleanup(self, game_id: str) -> None:
         self.sessions.pop(game_id, None)

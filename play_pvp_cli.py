@@ -26,24 +26,26 @@ async def main():
 
     elif len(sys.argv) > 1:
         game_id = sys.argv[1]
-        resp = requests.post(f"{BASE}/game/{game_id}/join")
+        username = input("Your username: ").strip() or "anonymous"
+        resp = requests.post(f"{BASE}/game/{game_id}/join", json={"username": username})
         if resp.status_code != 200:
             print("Couldn't join:", resp.json())
             return
         data = resp.json()
         seat, token = data["seat"], data["token"]
-        print(f"You are seat {seat}.")
+        print(f"You are seat {seat} (Elo {data['elo']}).")
         print(f"If you get disconnected, reconnect with:")
         print(f"  python3 play_pvp_cli.py {game_id} {token}\n")
 
     else:
-        resp = requests.post(f"{BASE}/game/new/pvp")
+        username = input("Your username: ").strip() or "anonymous"
+        resp = requests.post(f"{BASE}/game/new/pvp", json={"username": username})
         data = resp.json()
         game_id = data["game_id"]
         seat, token = data["seat"], data["token"]
         print(f"\nGame created! Give this to your opponent so they can join:")
         print(f"  python3 play_pvp_cli.py {game_id}\n")
-        print(f"You are seat {seat}.")
+        print(f"You are seat {seat} (Elo {data['elo']}).")
         print(f"If you get disconnected, reconnect with:")
         print(f"  python3 play_pvp_cli.py {game_id} {token}\n")
 
@@ -98,6 +100,8 @@ async def main():
 
             elif event == "end":
                 print(f"\n{msg['message']}")
+                if msg.get("elo"):
+                    print(f"New Elo -- seat 1: {msg['elo']['1']}, seat 2: {msg['elo']['2']}")
                 break
 
 

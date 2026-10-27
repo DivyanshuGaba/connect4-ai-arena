@@ -17,6 +17,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    elo: Mapped[int] = mapped_column(Integer, default=1200, server_default="1200")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     games_as_player_one: Mapped[list["Game"]] = relationship(

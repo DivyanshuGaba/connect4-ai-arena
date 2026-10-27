@@ -1,8 +1,4 @@
-import os
 import time
-
-TEST_DB_PATH = os.path.join(os.path.dirname(__file__), "_test_pvp.db")
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,14 +6,8 @@ from fastapi.testclient import TestClient
 from api import main as api_main
 from multiplayer import connection_manager
 
-
-@pytest.fixture(scope="module", autouse=True)
-def _clean_db_file():
-    if os.path.exists(TEST_DB_PATH):
-        os.remove(TEST_DB_PATH)
-    yield
-    if os.path.exists(TEST_DB_PATH):
-        os.remove(TEST_DB_PATH)
+# DATABASE_URL / REDIS_URL are set once, for every app-level test module, in
+# tests/conftest.py -- see the comment there for why.
 
 
 @pytest.fixture(autouse=True)
@@ -36,13 +26,13 @@ def client():
 
 
 def test_create_and_join_pvp_game(client):
-    r = client.post("/game/new/pvp")
+    r = client.post("/game/new/pvp", json={"username": "alice"})
     assert r.status_code == 200
     created = r.json()
     assert created["seat"] == 1
     game_id, token1 = created["game_id"], created["token"]
 
-    r = client.post(f"/game/{game_id}/join")
+    r = client.post(f"/game/{game_id}/join", json={"username": "bob"})
     assert r.status_code == 200
     joined = r.json()
     assert joined["seat"] == 2
@@ -50,15 +40,15 @@ def test_create_and_join_pvp_game(client):
 
 
 def test_join_already_full_game_fails(client):
-    game_id = client.post("/game/new/pvp").json()["game_id"]
-    client.post(f"/game/{game_id}/join")  # fills seat 2
+    game_id = client.post("/game/new/pvp", json={"username": "alice"}).json()["game_id"]
+    client.post(f"/game/{game_id}/join", json={"username": "bob"})  # fills seat 2
 
-    r = client.post(f"/game/{game_id}/join")
+    r = client.post(f"/game/{game_id}/join", json={"username": "bob"})
     assert r.status_code == 400
 
 
 def test_invalid_token_rejected(client):
-    game_id = client.post("/game/new/pvp").json()["game_id"]
+    game_id = client.post("/game/new/pvp", json={"username": "alice"}).json()["game_id"]
 
     with pytest.raises(Exception):
         with client.websocket_connect(f"/game/{game_id}/play?token=not-a-real-token"):
@@ -66,9 +56,9 @@ def test_invalid_token_rejected(client):
 
 
 def test_move_broadcasts_to_both_players(client):
-    created = client.post("/game/new/pvp").json()
+    created = client.post("/game/new/pvp", json={"username": "alice"}).json()
     game_id, token1 = created["game_id"], created["token"]
-    token2 = client.post(f"/game/{game_id}/join").json()["token"]
+    token2 = client.post(f"/game/{game_id}/join", json={"username": "bob"}).json()["token"]
 
     with client.websocket_connect(f"/game/{game_id}/play?token={token1}") as ws1:
         sync1 = ws1.receive_json()
@@ -93,9 +83,9 @@ def test_move_broadcasts_to_both_players(client):
 
 
 def test_playing_out_of_turn_is_rejected(client):
-    created = client.post("/game/new/pvp").json()
+    created = client.post("/game/new/pvp", json={"username": "alice"}).json()
     game_id, token1 = created["game_id"], created["token"]
-    token2 = client.post(f"/game/{game_id}/join").json()["token"]
+    token2 = client.post(f"/game/{game_id}/join", json={"username": "bob"}).json()["token"]
 
     with client.websocket_connect(f"/game/{game_id}/play?token={token1}") as ws1:
         ws1.receive_json()  # sync
@@ -113,9 +103,9 @@ def test_playing_out_of_turn_is_rejected(client):
 def test_disconnect_then_forfeit_after_window(client, monkeypatch):
     monkeypatch.setattr(connection_manager, "RECONNECT_WINDOW_SECONDS", 0.3)
 
-    created = client.post("/game/new/pvp").json()
+    created = client.post("/game/new/pvp", json={"username": "alice"}).json()
     game_id, token1 = created["game_id"], created["token"]
-    token2 = client.post(f"/game/{game_id}/join").json()["token"]
+    token2 = client.post(f"/game/{game_id}/join", json={"username": "bob"}).json()["token"]
 
     with client.websocket_connect(f"/game/{game_id}/play?token={token1}") as ws1:
         ws1.receive_json()  # sync
@@ -138,9 +128,9 @@ def test_disconnect_then_forfeit_after_window(client, monkeypatch):
 def test_disconnect_then_reconnect_cancels_forfeit(client, monkeypatch):
     monkeypatch.setattr(connection_manager, "RECONNECT_WINDOW_SECONDS", 1.0)
 
-    created = client.post("/game/new/pvp").json()
+    created = client.post("/game/new/pvp", json={"username": "alice"}).json()
     game_id, token1 = created["game_id"], created["token"]
-    token2 = client.post(f"/game/{game_id}/join").json()["token"]
+    token2 = client.post(f"/game/{game_id}/join", json={"username": "bob"}).json()["token"]
 
     with client.websocket_connect(f"/game/{game_id}/play?token={token1}") as ws1:
         ws1.receive_json()  # sync
