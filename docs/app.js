@@ -7,7 +7,7 @@ const turnLbl  = document.getElementById('turn-label');
 
 const COLS = 7;
 const ROWS = 6;
-const API = 'https://connect4-ai-arena.onrender.com';
+const API = 'https://api.connect4ai.com';
 
 const C = {
   boardBg:   '#0e1628',
