@@ -4,6 +4,7 @@
   const { COLS, emptyGrid, dropRow, findWinCells, fallPosition, dropDuration, easeInOut, createBoard, motionQuery, darkQuery } = window.C4;
 
   const API = 'https://api.connect4ai.com';
+  const WS_BASE = API.replace(/^http/, 'ws');
 
   const stage = document.getElementById('stage');
   const canvas = document.getElementById('board');
@@ -20,6 +21,27 @@
   const moveLog = document.getElementById('move-log');
   const logEmpty = document.getElementById('log-empty');
   const replayLink = document.getElementById('replay-link');
+  const scoreYouDisc = document.getElementById('score-you-disc');
+  const scoreYouName = document.getElementById('score-you-name');
+  const scoreAiDisc = document.getElementById('score-ai-disc');
+  const scoreAiName = document.getElementById('score-ai-name');
+  const btnOnline = document.getElementById('btn-online');
+  const inviteBox = document.getElementById('invite');
+  const inviteLink = document.getElementById('invite-link');
+  const btnCopy = document.getElementById('btn-copy');
+  const onlineDialog = document.getElementById('online');
+  const onlineTitle = document.getElementById('online-title');
+  const onlineLead = document.getElementById('online-lead');
+  const nameSaved = document.getElementById('name-saved');
+  const nameShown = document.getElementById('name-shown');
+  const nameEdit = document.getElementById('name-edit');
+  const nameInput = document.getElementById('name-input');
+  const nameError = document.getElementById('name-error');
+  const btnChangeName = document.getElementById('btn-change-name');
+  const btnQuick = document.getElementById('btn-quick');
+  const btnFriend = document.getElementById('btn-friend');
+  const btnJoinRoom = document.getElementById('btn-join-room');
+  const btnOnlineClose = document.getElementById('btn-online-close');
 
   const board = createBoard(canvas);
 
@@ -33,7 +55,14 @@
   let session = 0;           // bumped on every new game so stale async work is ignored
   let socket = null;
   let socketQueue = Promise.resolve();
-  let scores = { you: 0, ai: 0 };
+  let aiScores = { you: 0, ai: 0 };
+  let onlineScores = { you: 0, ai: 0 };   // you = me, ai = my online opponent
+  let scores = aiScores;
+
+  // Online play. null when playing the AI or watching.
+  let online = null;   // { phase, name, seat, token, friend, everConnected, oppName, myElo, retries, room }
+  let turn = 1;        // whose turn it is in an online game
+  let oppPresent = false;
   let winCells = [];
   let lastMove = null;
   let moveCount = 0;
@@ -59,7 +88,12 @@
     return falling.length > 0 || !!thinking || (winCells.length > 0 && !motionQuery.matches);
   }
 
+  function mySeat() { return online && online.seat ? online.seat : 1; }
+
   function canHumanMove() {
+    if (online) {
+      return !!gameId && online.phase === 'game' && !gameOver && oppPresent && turn === mySeat() && !busy && falling.length === 0;
+    }
     return !!gameId && !gameOver && !watchMode && !busy && falling.length === 0;
   }
 
@@ -108,8 +142,8 @@
         const row = dropRow(col, grid);
         if (row >= 0) {
           tintCol = col;
-          preview = { x: board.colX(col), y: board.geo.stripY, player: 1, alpha: 0.95 };
-          ghost = { col, row, player: 1 };
+          preview = { x: board.colX(col), y: board.geo.stripY, player: mySeat(), alpha: 0.95 };
+          ghost = { col, row, player: mySeat() };
         }
       }
     }
@@ -164,6 +198,22 @@
     scoreAiEl.textContent = scores.ai;
   }
 
+  function kindFor(seat) { return seat === 1 ? 'you' : 'ai'; }
+
+  function applyScoreLabels() {
+    if (online && online.seat) {
+      scoreYouDisc.className = 'disc ' + kindFor(online.seat);
+      scoreAiDisc.className = 'disc ' + kindFor(online.seat === 1 ? 2 : 1);
+      scoreYouName.textContent = 'You' + (online.myElo ? ' (' + online.myElo + ')' : '');
+      scoreAiName.textContent = online.oppName;
+    } else {
+      scoreYouDisc.className = 'disc you';
+      scoreAiDisc.className = 'disc ai';
+      scoreYouName.textContent = 'You';
+      scoreAiName.textContent = 'AI';
+    }
+  }
+
   function setMode(mode) {
     btnWatch.setAttribute('aria-pressed', mode === 'watch' ? 'true' : 'false');
   }
@@ -177,7 +227,9 @@
     const dot = document.createElement('span');
     dot.className = 'disc ' + (player === 1 ? 'you' : 'ai');
 
-    const who = watchMode ? 'Player ' + player : (player === 1 ? 'You' : 'AI');
+    let who;
+    if (online) who = player === mySeat() ? 'You' : online.oppName;
+    else who = watchMode ? 'Player ' + player : (player === 1 ? 'You' : 'AI');
     const text = document.createElement('span');
     text.textContent = who + ', column ' + (col + 1);
 
@@ -211,6 +263,8 @@
     moveLog.textContent = '';
     logEmpty.hidden = false;
     replayLink.hidden = true;
+    turn = 1;
+    oppPresent = false;
   }
 
   function closeSocket() {
@@ -226,6 +280,7 @@
   /* ---------- Playing against the AI ---------- */
 
   async function newGame() {
+    if (!leaveOnline(true)) return;
     const mine = ++session;
     closeSocket();
     started = true;
@@ -276,6 +331,7 @@
 
   async function sendMove(col) {
     if (!canHumanMove()) return;
+    if (online) { sendOnlineMove(col); return; }
     const row = dropRow(col, grid);
     if (row < 0) {
       statusDetail.textContent = 'That column is full. Pick another.';
@@ -351,6 +407,397 @@
     }
   }
 
+  /* ---------- Playing another person online ---------- */
+
+  const NAME_KEY = 'c4-name';
+  const RECONNECT_TRIES = 8;
+  let pendingRoom = null;   // game id from an invite link, until it is joined
+
+  function savedName() {
+    try { return (localStorage.getItem(NAME_KEY) || '').trim().slice(0, 20); } catch (e) { return ''; }
+  }
+
+  function saveName(name) {
+    try { localStorage.setItem(NAME_KEY, name); } catch (e) { /* storage unavailable */ }
+  }
+
+  function showNameError(message) {
+    nameError.textContent = message || '';
+    nameError.hidden = !message;
+  }
+
+  function showNameEditor(on) {
+    nameEdit.hidden = !on;
+    nameSaved.hidden = on || !nameShown.textContent;
+    if (on) nameInput.focus();
+  }
+
+  function openOnlineDialog(room) {
+    pendingRoom = room || null;
+    const name = savedName();
+    nameInput.value = name;
+    nameShown.textContent = name;
+    showNameError('');
+    showNameEditor(!name);
+
+    onlineTitle.textContent = room ? "Join a friend's game" : 'Play online';
+    onlineLead.textContent = room
+      ? 'A friend invited you to a game. Pick a name to join.'
+      : 'Play another person in real time. Winning raises your rating, and the ratings are on the Replays and leaderboard page.';
+    btnQuick.hidden = !!room;
+    btnFriend.hidden = !!room;
+    btnJoinRoom.hidden = !room;
+
+    if (typeof onlineDialog.showModal === 'function') {
+      if (!onlineDialog.open) onlineDialog.showModal();
+      if (name) (room ? btnJoinRoom : btnQuick).focus();
+    }
+  }
+
+  // Returns a valid name, or null after showing why not.
+  function readName() {
+    let name = nameEdit.hidden ? savedName() : nameInput.value.trim();
+    name = name.replace(/\s+/g, ' ');
+    if (!name) { showNameError('Enter a name to play online.'); showNameEditor(true); return null; }
+    if (name.length > 20) { showNameError('Names can be up to 20 characters.'); return null; }
+    saveName(name);
+    return name;
+  }
+
+  function setOnlineButton() {
+    btnOnline.textContent = !online ? 'Play online' : (online.phase === 'game' && !gameOver ? 'Leave game' : (online.phase === 'game' ? 'Play online' : 'Cancel'));
+  }
+
+  // Leaves any online session. Returns false if the player chose to stay.
+  function leaveOnline(ask) {
+    if (!online) return true;
+    if (ask && online.phase === 'game' && !gameOver) {
+      const ok = window.confirm('Leave this game? If you do not come back, your opponent wins.');
+      if (!ok) return false;
+    }
+    closeSocket();
+    online = null;
+    scores = aiScores;
+    updateScores();
+    applyScoreLabels();
+    inviteBox.hidden = true;
+    setOnlineButton();
+    return true;
+  }
+
+  function beginOnline(name, friend) {
+    const mine = ++session;
+    closeSocket();
+    started = true;
+    resetBoardState();
+    watchMode = false;
+    setMode('play');
+    online = { phase: 'queue', name, seat: 0, token: '', friend: !!friend, everConnected: false, oppName: friend ? 'Friend' : 'Opponent', myElo: 0, retries: 0 };
+    onlineScores = { you: 0, ai: 0 };
+    scores = onlineScores;
+    updateScores();
+    applyScoreLabels();
+    inviteBox.hidden = true;
+    setOnlineButton();
+    schedule();
+    return mine;
+  }
+
+  function onlineFailed(mine, title, detail) {
+    if (mine !== session) return;
+    closeSocket();
+    if (online) online.phase = 'failed';
+    setStatus('idle', title, detail);
+    setOnlineButton();
+    schedule();
+  }
+
+  function startQuickMatch(name) {
+    const mine = beginOnline(name, false);
+    setStatus('idle', 'Looking for an opponent', 'Waiting for another player. Press Cancel to stop looking.', true);
+
+    let ws;
+    try {
+      ws = new WebSocket(WS_BASE + '/matchmaking/queue?username=' + encodeURIComponent(name));
+    } catch (e) {
+      onlineFailed(mine, "Can't reach the server", 'Check your connection, then try again.');
+      return;
+    }
+    socket = ws;
+    ws.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch (e) { return; }
+      if (mine !== session || data.event !== 'matched') return;
+      ws.onclose = null;
+      ws.onerror = null;
+      startPlay(data, mine);
+    };
+    ws.onerror = () => onlineFailed(mine, "Can't reach the server", 'Check your connection, then try again.');
+    ws.onclose = () => {
+      if (mine === session && online && online.phase === 'queue') {
+        onlineFailed(mine, 'Connection closed', 'The search stopped. Choose Play online to try again.');
+      }
+    };
+  }
+
+  async function postJson(path, body) {
+    const res = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* no body */ }
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  async function createRoom(name) {
+    const mine = beginOnline(name, true);
+    setStatus('idle', 'Creating a game', 'One moment.', true);
+    try {
+      const r = await postJson('/game/new/pvp', { username: name });
+      if (mine !== session) return;
+      if (!r.ok) throw new Error('Bad response');
+      const link = window.location.origin + window.location.pathname + '?room=' + encodeURIComponent(r.data.game_id);
+      inviteLink.value = link;
+      inviteBox.hidden = false;
+      startPlay(r.data, mine);
+    } catch (e) {
+      onlineFailed(mine, "Can't reach the server", 'Check your connection, then try again.');
+    }
+  }
+
+  async function joinRoom(name, room) {
+    const mine = beginOnline(name, true);
+    setStatus('idle', 'Joining the game', 'One moment.', true);
+    try {
+      const r = await postJson('/game/' + encodeURIComponent(room) + '/join', { username: name });
+      if (mine !== session) return;
+      if (r.status === 404) { onlineFailed(mine, 'Game not found', 'The invite link is old or the game already ended. Ask your friend for a new one.'); return; }
+      if (r.status === 400) { onlineFailed(mine, 'Game is full', 'Two players are already in this game.'); return; }
+      if (!r.ok) throw new Error('Bad response');
+      startPlay(r.data, mine);
+    } catch (e) {
+      onlineFailed(mine, "Can't reach the server", 'Check your connection, then try again.');
+    }
+  }
+
+  function startPlay(info, mine) {
+    if (mine !== session || !online) return;
+    online.phase = 'game';
+    online.seat = info.seat;
+    online.token = info.token;
+    online.myElo = info.elo || 0;
+    online.retries = 0;
+    gameId = info.game_id;
+    applyScoreLabels();
+    setOnlineButton();
+    connectPlay(mine);
+  }
+
+  function connectPlay(mine) {
+    let ws;
+    try {
+      ws = new WebSocket(WS_BASE + '/game/' + encodeURIComponent(gameId) + '/play?token=' + encodeURIComponent(online.token));
+    } catch (e) {
+      onlineFailed(mine, "Can't reach the server", 'Check your connection, then try again.');
+      return;
+    }
+    socket = ws;
+    oppPresent = false;
+    socketQueue = Promise.resolve();
+
+    ws.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch (e) { return; }
+      socketQueue = socketQueue.then(() => handlePlayEvent(data, mine)).catch(() => {});
+    };
+    ws.onclose = (event) => {
+      if (mine !== session || !online || gameOver) return;
+      if (event.code === 4404) { onlineFailed(mine, 'Game ended', 'This game is no longer running.'); return; }
+      if (event.code === 4401) { onlineFailed(mine, "Can't rejoin", 'Your seat in this game could not be verified.'); return; }
+      if (online.retries >= RECONNECT_TRIES) {
+        onlineFailed(mine, 'Connection lost', 'Could not reconnect. Choose Play online to start a new game.');
+        return;
+      }
+      online.retries++;
+      oppPresent = false;
+      setStatus('idle', 'Connection lost', 'Trying to reconnect.', true);
+      schedule();
+      setTimeout(() => { if (mine === session && online && !gameOver) connectPlay(mine); }, 1500);
+    };
+  }
+
+  function updateTurnStatus() {
+    if (!online || gameOver) return;
+    const me = mySeat();
+    if (!oppPresent) {
+      if (online.friend && !online.everConnected) {
+        setStatus(kindFor(me), 'Waiting for your friend', 'Send them the link below. The game starts when they join.', true);
+      } else {
+        setStatus('idle', online.oppName + ' is not connected', 'Waiting for them to come back.', true);
+      }
+    } else if (turn === me) {
+      setStatus(kindFor(me), 'Your move', 'Click or tap a column to drop a disc.');
+    } else {
+      setStatus(kindFor(me === 1 ? 2 : 1), online.oppName + ' is thinking', 'Waiting for their move.', true);
+    }
+    schedule();
+  }
+
+  function finishOnline(data) {
+    gameOver = true;
+    busy = false;
+    const me = mySeat();
+    const winner = data.winner || 0;
+    winCells = winner && !data.reason ? findWinCells(grid) : [];
+
+    let eloText = '';
+    if (data.elo && data.elo[String(me)] !== undefined) {
+      const next = data.elo[String(me)];
+      const diff = next - online.myElo;
+      eloText = ' Your rating is now ' + next + ' (' + (diff >= 0 ? '+' : '') + diff + ').';
+      online.myElo = next;
+      applyScoreLabels();
+    }
+
+    if (winner === me) {
+      scores.you++;
+      setStatus('gold', 'You win', (data.reason === 'forfeit' ? 'Your opponent left the game.' : 'Four in a row.') + eloText);
+    } else if (winner) {
+      scores.ai++;
+      setStatus(kindFor(winner), online.oppName + ' wins', 'Better luck next time.' + eloText);
+    } else {
+      setStatus('idle', 'Draw', 'The board is full.' + eloText);
+    }
+    updateScores();
+    setOnlineButton();
+    if (gameId) {
+      replayLink.href = 'replay.html?game=' + encodeURIComponent(gameId);
+      replayLink.hidden = false;
+    }
+    schedule();
+  }
+
+  async function handlePlayEvent(data, mine) {
+    if (mine !== session || !online) return;
+
+    if (data.event === 'sync') {
+      online.seat = data.seat;
+      falling.forEach((p) => p.resolve());
+      falling = [];
+      grid = data.grid;
+      turn = data.current_player;
+      busy = false;
+      applyScoreLabels();
+      updateTurnStatus();
+    } else if (data.event === 'opponent_connected') {
+      oppPresent = true;
+      online.everConnected = true;
+      inviteBox.hidden = true;
+      updateTurnStatus();
+    } else if (data.event === 'opponent_disconnected') {
+      oppPresent = false;
+      const secs = data.reconnect_window_seconds;
+      setStatus('idle', online.oppName + ' disconnected', 'If they do not come back' + (secs ? ' within ' + secs + ' seconds' : '') + ', you win.', true);
+      schedule();
+    } else if (data.event === 'move') {
+      const row = dropRow(data.col, grid);
+      busy = false;
+      if (row >= 0) {
+        grid[row][data.col] = data.player;
+        addLog(data.player, data.col);
+        await drop({ col: data.col, row, player: data.player });
+        if (mine !== session) return;
+        lastMove = { row, col: data.col, player: data.player };
+      }
+      grid = data.grid;
+      turn = data.current_player;
+      if (!data.winner && !data.is_draw) updateTurnStatus();
+      schedule();
+    } else if (data.event === 'end') {
+      await sleep(300);
+      if (mine !== session) return;
+      finishOnline(data);
+    } else if (data.event === 'error') {
+      busy = false;
+      statusDetail.textContent = data.message || 'Something went wrong.';
+    }
+  }
+
+  function sendOnlineMove(col) {
+    const row = dropRow(col, grid);
+    if (row < 0) {
+      statusDetail.textContent = 'That column is full. Pick another.';
+      return;
+    }
+    if (!socket || socket.readyState !== 1) return;
+    busy = true;
+    socket.send(JSON.stringify({ action: 'move', col }));
+    const mine = session;
+    setTimeout(() => { if (mine === session && busy) { busy = false; schedule(); } }, 4000);
+  }
+
+  function copyInvite() {
+    const done = () => {
+      btnCopy.textContent = 'Copied';
+      setTimeout(() => { btnCopy.textContent = 'Copy link'; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(inviteLink.value).then(done, () => { inviteLink.select(); });
+    } else {
+      inviteLink.select();
+      try { document.execCommand('copy'); done(); } catch (e) { /* user can copy by hand */ }
+    }
+  }
+
+  btnOnline.addEventListener('click', () => {
+    if (!online || online.phase === 'failed' || (online.phase === 'game' && gameOver)) {
+      openOnlineDialog(null);
+      return;
+    }
+    // Searching, waiting, or mid-game: go back to playing the AI.
+    newGame();
+  });
+
+  btnChangeName.addEventListener('click', () => { showNameError(''); showNameEditor(true); });
+  btnOnlineClose.addEventListener('click', () => onlineDialog.close());
+  btnCopy.addEventListener('click', copyInvite);
+
+  btnQuick.addEventListener('click', () => {
+    const name = readName();
+    if (!name) return;
+    if (!leaveOnline(true)) return;
+    onlineDialog.close('go');
+    startQuickMatch(name);
+  });
+  btnFriend.addEventListener('click', () => {
+    const name = readName();
+    if (!name) return;
+    if (!leaveOnline(true)) return;
+    onlineDialog.close('go');
+    createRoom(name);
+  });
+  btnJoinRoom.addEventListener('click', () => {
+    const name = readName();
+    if (!name || !pendingRoom) return;
+    const room = pendingRoom;
+    pendingRoom = null;
+    onlineDialog.close('go');
+    joinRoom(name, room);
+  });
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    (btnJoinRoom.hidden ? btnQuick : btnJoinRoom).click();
+  });
+  onlineDialog.addEventListener('click', (e) => { if (e.target === onlineDialog) onlineDialog.close(); });
+  onlineDialog.addEventListener('close', () => {
+    // Cancelled without starting anything: fall back to a normal game.
+    if (!started && onlineDialog.returnValue !== 'go') newGame();
+    onlineDialog.returnValue = '';
+  });
+
   /* ---------- Watching AI vs AI ---------- */
 
   async function handleWatchEvent(data, mine) {
@@ -385,6 +832,7 @@
   }
 
   function watchAI() {
+    if (!leaveOnline(true)) return;
     const mine = ++session;
     closeSocket();
     started = true;
@@ -528,7 +976,12 @@
   updateScores();
   setStatus('idle', 'Getting ready', 'Read the rules, then start playing.');
 
-  if (rulesSeen() || typeof dialog.showModal !== 'function') {
+  const inviteRoom = new URLSearchParams(window.location.search).get('room');
+
+  if (inviteRoom && typeof onlineDialog.showModal === 'function') {
+    setStatus('idle', "Join a friend's game", 'Pick a name to join.');
+    openOnlineDialog(inviteRoom);
+  } else if (rulesSeen() || typeof dialog.showModal !== 'function') {
     newGame();
   } else {
     dialog.showModal();
