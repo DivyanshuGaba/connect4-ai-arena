@@ -414,6 +414,63 @@ dialog.rules::backdrop {
 .rules li .disc { width: 18px; height: 18px; margin-top: 3px; }
 .rules .btn { width: 100%; }
 
+/* Online play */
+
+.btn-wide { width: 100%; }
+
+.btn-quiet { border-color: transparent; color: var(--ink-2); }
+
+.dialog-lead { margin: 12px 0 20px; color: var(--ink-2); }
+
+.name-field { display: grid; gap: 8px; margin-bottom: 16px; }
+.name-field label { font-weight: 600; font-size: 0.9375rem; }
+
+#name-saved {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#name-saved[hidden], #name-edit[hidden] { display: none; }
+
+.name-field input,
+.invite input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.name-field input:focus-visible,
+.invite input:focus-visible { outline-offset: 1px; }
+
+.hint { color: var(--ink-2); font-size: 0.8125rem; margin: 0; }
+
+.form-error { color: var(--you); font-weight: 500; margin: 0 0 16px; }
+.form-error[hidden] { display: none; }
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.dialog-actions { display: grid; gap: 10px; margin-top: 8px; }
+
+.invite { display: grid; gap: 8px; }
+.invite[hidden] { display: none; }
+.invite-label { font-weight: 600; font-size: 0.9375rem; }
+.invite-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+
 /* Replay page */
 
 .transport {

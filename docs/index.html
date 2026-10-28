@@ -50,11 +50,11 @@
       <aside class="panel" aria-label="Match">
         <div class="scores">
           <div class="score">
-            <span class="score-label"><span class="disc you"></span>You</span>
+            <span class="score-label"><span class="disc you" id="score-you-disc"></span><span id="score-you-name">You</span></span>
             <span class="score-num" id="score-you">0</span>
           </div>
           <div class="score">
-            <span class="score-label"><span class="disc ai"></span>AI</span>
+            <span class="score-label"><span class="disc ai" id="score-ai-disc"></span><span id="score-ai-name">AI</span></span>
             <span class="score-num" id="score-ai">0</span>
           </div>
         </div>
@@ -70,6 +70,16 @@
         <div class="actions">
           <button type="button" class="btn btn-primary" id="btn-new">New game</button>
           <button type="button" class="btn" id="btn-watch" aria-pressed="false">Watch AI vs AI</button>
+        </div>
+
+        <button type="button" class="btn btn-wide" id="btn-online">Play online</button>
+
+        <div class="invite" id="invite" hidden>
+          <label class="invite-label" for="invite-link">Send this link to your friend</label>
+          <div class="invite-row">
+            <input type="text" id="invite-link" readonly />
+            <button type="button" class="btn" id="btn-copy">Copy link</button>
+          </div>
         </div>
 
         <a class="text-link" id="replay-link" href="replay.html" hidden>Replay this game</a>
@@ -107,8 +117,35 @@
         <span class="disc idle"></span>
         <span>Hover over a column to see where your disc will land.</span>
       </li>
+      <li>
+        <span class="disc gold"></span>
+        <span>Choose Play online to face another person live. Wins and losses change your rating on the leaderboard.</span>
+      </li>
     </ul>
     <button type="button" class="btn btn-primary" id="btn-start" autofocus>Start playing</button>
+  </dialog>
+
+  <dialog class="rules" id="online" aria-labelledby="online-title">
+    <h2 id="online-title">Play online</h2>
+    <p class="dialog-lead" id="online-lead">Play another person in real time. Winning raises your rating, and the ratings are on the Replays and leaderboard page.</p>
+
+    <div class="name-field" id="name-saved" hidden>
+      <span>Playing as <strong id="name-shown"></strong></span>
+      <button type="button" class="link-btn" id="btn-change-name">Change name</button>
+    </div>
+    <div class="name-field" id="name-edit">
+      <label for="name-input">Your name</label>
+      <input type="text" id="name-input" maxlength="20" autocomplete="nickname" spellcheck="false" />
+      <p class="hint">1 to 20 characters. There are no passwords, so pick a name you will reuse.</p>
+    </div>
+    <p class="form-error" id="name-error" role="alert" hidden></p>
+
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-primary" id="btn-quick">Find an opponent</button>
+      <button type="button" class="btn" id="btn-friend">Play a friend</button>
+      <button type="button" class="btn btn-primary" id="btn-join-room" hidden>Join game</button>
+      <button type="button" class="btn btn-quiet" id="btn-online-close">Cancel</button>
+    </div>
   </dialog>
 
   <script src="board.js"></script>

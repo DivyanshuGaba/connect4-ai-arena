@@ -14,6 +14,7 @@ A game-playing AI built from scratch in Python. Implements two approaches to the
 
 - Click **New Game** to play against the Minimax AI
 - Click **Watch AI vs AI** to watch two AIs compete live over WebSocket
+- Click **Play online** to play another person live: **Find an opponent** uses matchmaking, **Play a friend** gives you an invite link. Results update an Elo rating shown on the leaderboard
 - Winning pieces highlight in yellow when the game ends
 - Score tracker updates across multiple games
 
@@ -87,6 +88,11 @@ connect4-ai-arena/
 | GET | `/game/{id}/state` | Get current board state |
 | POST | `/game/{id}/move` | Make a move (AI responds automatically) |
 | WS | `/game/{id}/watch` | Stream live AI vs AI game |
+| POST | `/game/new/pvp` | Create a human vs human game (returns a seat token) |
+| POST | `/game/{id}/join` | Take seat 2 of a human vs human game |
+| WS | `/game/{id}/play?token=` | Live human vs human play, with reconnect window and forfeit |
+| WS | `/matchmaking/queue?username=` | Redis-backed matchmaking queue |
+| GET | `/leaderboard` | Top players by Elo |
 
 Full interactive docs: https://api.connect4ai.com/docs
 
@@ -200,4 +206,5 @@ Browser
 - [x] AWS deployment (EC2, RDS, S3, CloudFront, HTTPS custom domain)
 - [x] Secrets Manager for credentials, CloudWatch logs and alarms
 - [x] Frontend redesign (light and dark themes, drop animation, hover preview, keyboard play, replay scrubber)
+- [x] Online multiplayer in the web UI (matchmaking queue, invite links, Elo)
 - [ ] Self-play neural network agent (stretch goal)
