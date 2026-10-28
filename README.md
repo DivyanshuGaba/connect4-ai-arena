@@ -58,9 +58,12 @@ connect4-ai-arena/
 │   ├── main.py                  # REST endpoints + WebSocket streaming
 │   └── __init__.py
 ├── docs/                        # Web UI (served by S3/CloudFront and GitHub Pages)
-│   ├── index.html               # Canvas board
+│   ├── index.html               # Game page
 │   ├── app.js                   # Game logic, API calls, WebSocket client
-│   └── replay.html              # Game replay viewer
+│   ├── replay.html              # Replay and leaderboard page
+│   ├── replay.js                # Replay player logic
+│   ├── board.js                 # Shared canvas board renderer
+│   └── style.css                # Shared design system (light and dark themes)
 ├── tests/
 │   └── test_board.py            # 9 pytest unit tests
 ├── benchmark.py                 # Algorithm benchmarking script
@@ -195,5 +198,5 @@ Browser
 - [x] Frontend deployment (GitHub Pages)
 - [x] AWS deployment (EC2, RDS, S3, CloudFront, HTTPS custom domain)
 - [x] Secrets Manager for credentials, CloudWatch logs and alarms
+- [x] Frontend redesign (light and dark themes, drop animation, hover preview, keyboard play, replay scrubber)
 - [ ] Self-play neural network agent (stretch goal)
-- [ ] Frontend UI polish (animations, piece drop effect)

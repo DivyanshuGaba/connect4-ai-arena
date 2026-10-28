@@ -2,435 +2,115 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Connect 4 AI Arena</title>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --p1: #e63946;
-      --p2: #2196f3;
-      --win: #ffd60a;
-      --bg: #07080f;
-      --board-bg: #0e1628;
-      --text: #e8eaf6;
-      --label: #546e8a;
-      --muted: #3d5068;
-      --border: #1a2640;
-    }
-
-    html, body { height: 100%; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Space Grotesk', sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      padding: 1.5rem 1rem 2rem;
-    }
-
-    header { text-align: center; margin-bottom: 1.25rem; }
-
-    h1 {
-      font-size: clamp(1rem, 4vw, 1.5rem);
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--p1);
-      margin-bottom: 0.3rem;
-    }
-
-    .subtitle {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: clamp(0.55rem, 2vw, 0.7rem);
-      color: var(--label);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-
-    .hud {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      max-width: 560px;
-      margin-bottom: 0.6rem;
-      padding: 0 2px;
-    }
-
-    .scores { display: flex; gap: 1.2rem; }
-
-    .score-block {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1px;
-    }
-
-    .score-num {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: clamp(1.2rem, 4vw, 1.6rem);
-      font-weight: 500;
-      line-height: 1;
-    }
-
-    .score-num.p1 { color: var(--p1); }
-    .score-num.p2 { color: var(--p2); }
-
-    .score-lbl {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.58rem;
-      color: var(--label);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-
-    .turn-badge {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: clamp(0.6rem, 2vw, 0.7rem);
-      color: var(--label);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: var(--board-bg);
-      border: 1px solid var(--border);
-      padding: 0.35rem 0.75rem;
-      border-radius: 2rem;
-    }
-
-    #turn-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--p1);
-      transition: background 0.3s;
-      flex-shrink: 0;
-    }
-
-    #turn-dot.pulse { animation: pulse 0.7s ease-in-out infinite; }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.3; transform: scale(0.7); }
-    }
-
-    .canvas-wrap {
-      width: 100%;
-      max-width: 560px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    canvas {
-      display: block;
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      touch-action: none;
-    }
-
-    .col-labels {
-      display: flex;
-      width: 100%;
-      max-width: 560px;
-      margin-top: 0.35rem;
-    }
-
-    .col-label {
-      flex: 1;
-      text-align: center;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.58rem;
-      color: var(--muted);
-    }
-
-    .controls {
-      display: flex;
-      gap: 0.6rem;
-      margin-top: 1.2rem;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    button {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(0.7rem, 2.5vw, 0.78rem);
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 0.6rem 1.4rem;
-      border-radius: 2rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid var(--border);
-      background: var(--board-bg);
-      color: var(--label);
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    button:hover, button:active { border-color: var(--p1); color: var(--p1); }
-    button.active { border-color: var(--p1); color: var(--p1); background: rgba(230,57,70,0.08); }
-
-    #status {
-      margin-top: 0.85rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: clamp(0.65rem, 2.2vw, 0.75rem);
-      color: var(--label);
-      letter-spacing: 0.05em;
-      min-height: 1.2rem;
-      text-align: center;
-      padding: 0 1rem;
-    }
-
-    #status.win      { color: var(--win); font-weight: 500; }
-    #status.lose     { color: var(--p2); }
-    #status.thinking { color: var(--p2); }
-
-    .game-id {
-      margin-top: 0.3rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.55rem;
-      color: #1d2d42;
-    }
-
-    .cold-start-notice {
-      margin-top: 0.8rem;
-      padding: 8px 12px;
-      background: rgba(255,255,255,0.04);
-      border: 0.5px solid #2a3a50;
-      border-radius: 4px;
-      width: 100%;
-      max-width: 560px;
-    }
-
-    .cold-start-notice p {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.6rem;
-      color: #546e8a;
-      letter-spacing: 0.1em;
-      text-align: center;
-      margin: 0;
-      text-transform: uppercase;
-    }
-
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(7, 8, 15, 0.92);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      padding: 1rem;
-      backdrop-filter: blur(4px);
-    }
-
-    .modal-overlay.hidden { display: none; }
-
-    .modal {
-      background: #0e1628;
-      border: 1px solid #1a2640;
-      border-radius: 16px;
-      padding: 2rem 1.75rem;
-      max-width: 380px;
-      width: 100%;
-    }
-
-    .modal h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--p1);
-      margin-bottom: 0.3rem;
-    }
-
-    .modal .tagline {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.65rem;
-      color: var(--label);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-bottom: 1.5rem;
-    }
-
-    .rules-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.9rem;
-      margin-bottom: 1.75rem;
-    }
-
-    .rules-list li {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      font-size: 0.88rem;
-      color: #a8b8cc;
-      line-height: 1.5;
-    }
-
-    .rule-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.7rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 500;
-      margin-top: 1px;
-    }
-
-    .rule-icon.red  { background: rgba(230,57,70,0.15); color: var(--p1); border: 1px solid rgba(230,57,70,0.3); }
-    .rule-icon.blue { background: rgba(33,150,243,0.15); color: var(--p2); border: 1px solid rgba(33,150,243,0.3); }
-    .rule-icon.gold { background: rgba(255,214,10,0.12); color: var(--win); border: 1px solid rgba(255,214,10,0.25); }
-    .rule-icon.gray { background: rgba(84,110,138,0.15); color: var(--label); border: 1px solid rgba(84,110,138,0.3); }
-
-    .legend {
-      display: flex;
-      gap: 1.2rem;
-      margin-bottom: 1.5rem;
-      padding: 0.75rem 1rem;
-      background: rgba(7,8,15,0.5);
-      border-radius: 8px;
-      border: 1px solid var(--border);
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.78rem;
-      color: #a8b8cc;
-    }
-
-    .legend-dot { width: 14px; height: 14px; border-radius: 50%; }
-
-    .btn-start {
-      width: 100%;
-      padding: 0.85rem;
-      border-radius: 2rem;
-      background: var(--p1);
-      color: white;
-      border: none;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.85rem;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: background 0.2s, transform 0.1s;
-    }
-
-    .btn-start:active { transform: scale(0.98); }
-    .btn-start:hover  { background: #c0392b; }
-
-    .btn-rules {
-      font-size: 0.62rem;
-      padding: 0.35rem 0.7rem;
-      margin-left: 0.5rem;
-    }
-  </style>
+  <meta name="description" content="Play Connect 4 against a minimax AI, or watch two AIs play each other live." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c2c55'/%3E%3Cg fill='%23ee4b2b'%3E%3Ccircle cx='8' cy='24' r='3'/%3E%3Ccircle cx='13.3' cy='18.7' r='3'/%3E%3Ccircle cx='18.7' cy='13.3' r='3'/%3E%3Ccircle cx='24' cy='8' r='3'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div class="app">
 
-  <!-- RULES MODAL -->
-  <div class="modal-overlay" id="modal">
-    <div class="modal">
-      <h2>Connect 4 AI Arena</h2>
-      <p class="tagline">Minimax · Alpha-Beta Pruning · MCTS</p>
+    <header class="top">
+      <a class="brand" href="index.html">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" style="fill: var(--board-face)" />
+          <g style="fill: var(--you)">
+            <circle cx="8" cy="24" r="3" />
+            <circle cx="13.3" cy="18.7" r="3" />
+            <circle cx="18.7" cy="13.3" r="3" />
+            <circle cx="24" cy="8" r="3" />
+          </g>
+        </svg>
+        <span class="brand-name">Connect 4 AI Arena</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <button type="button" id="btn-rules">How to play</button>
+        <a href="replay.html">Replays<span class="nav-long"> and leaderboard</span></a>
+      </nav>
+    </header>
 
-      <ul class="rules-list">
-        <li>
-          <div class="rule-icon red">1</div>
-          <span>You are <strong style="color:#e63946">Red</strong>. Drop a piece by clicking or tapping any column on the board.</span>
-        </li>
-        <li>
-          <div class="rule-icon blue">2</div>
-          <span>The <strong style="color:#2196f3">Blue AI</strong> responds instantly using Minimax with alpha-beta pruning.</span>
-        </li>
-        <li>
-          <div class="rule-icon gold">4</div>
-          <span>Connect <strong>4 pieces</strong> in a row — horizontally, vertically, or diagonally — to win.</span>
-        </li>
-        <li>
-          <div class="rule-icon gray">?</div>
-          <span>Hover over a column to preview where your piece will land before you drop it.</span>
-        </li>
-      </ul>
+    <main class="arena">
+      <h1 class="visually-hidden">Connect 4 AI Arena</h1>
 
-      <div class="legend">
-        <div class="legend-item">
-          <div class="legend-dot" style="background:#e63946"></div>
-          You (Red)
+      <section class="stage" id="stage" aria-label="Game board">
+        <canvas
+          id="board"
+          class="board"
+          tabindex="0"
+          role="application"
+          aria-label="Connect 4 board. Use the left and right arrow keys to choose a column, then Enter to drop a disc. You can also press a number from 1 to 7."
+        ></canvas>
+      </section>
+
+      <aside class="panel" aria-label="Match">
+        <div class="scores">
+          <div class="score">
+            <span class="score-label"><span class="disc you"></span>You</span>
+            <span class="score-num" id="score-you">0</span>
+          </div>
+          <div class="score">
+            <span class="score-label"><span class="disc ai"></span>AI</span>
+            <span class="score-num" id="score-ai">0</span>
+          </div>
         </div>
-        <div class="legend-item">
-          <div class="legend-dot" style="background:#2196f3"></div>
-          AI (Blue)
+
+        <div class="status" aria-live="polite">
+          <span class="disc idle" id="status-disc"></span>
+          <div>
+            <h2 class="status-title" id="status-title">Getting ready</h2>
+            <p class="status-detail" id="status-detail">Setting up the board.</p>
+          </div>
         </div>
-        <div class="legend-item">
-          <div class="legend-dot" style="background:#ffd60a"></div>
-          Winner
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="btn-new">New game</button>
+          <button type="button" class="btn" id="btn-watch" aria-pressed="false">Watch AI vs AI</button>
         </div>
-      </div>
 
-      <button class="btn-start" id="btn-start">Start Playing</button>
-    </div>
+        <a class="text-link" id="replay-link" href="replay.html" hidden>Replay this game</a>
+
+        <section class="log" aria-label="Moves">
+          <h2 class="section-title">Moves</h2>
+          <ol class="log-list" id="move-log"></ol>
+          <p class="log-empty" id="log-empty">Moves show up here as the game goes.</p>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="foot">
+      <span>Minimax with alpha-beta pruning, hosted on AWS.</span>
+      <a href="https://github.com/DivyanshuGaba/connect4-ai-arena">Source on GitHub</a>
+    </footer>
   </div>
 
-  <header>
-    <h1>Connect 4 AI Arena</h1>
-    <p class="subtitle">Minimax · Alpha-Beta · MCTS</p>
-  </header>
+  <dialog class="rules" id="rules" aria-labelledby="rules-title">
+    <h2 id="rules-title">How to play</h2>
+    <ul>
+      <li>
+        <span class="disc you"></span>
+        <span>You play red and go first. Click or tap a column to drop a disc, or use the arrow keys and Enter.</span>
+      </li>
+      <li>
+        <span class="disc ai"></span>
+        <span>The AI plays white and replies at once, searching ahead with minimax and alpha-beta pruning.</span>
+      </li>
+      <li>
+        <span class="disc gold"></span>
+        <span>Line up four discs across, down or diagonally to win. The winning four light up.</span>
+      </li>
+      <li>
+        <span class="disc idle"></span>
+        <span>Hover over a column to see where your disc will land.</span>
+      </li>
+    </ul>
+    <button type="button" class="btn btn-primary" id="btn-start" autofocus>Start playing</button>
+  </dialog>
 
-  <div class="hud">
-    <div class="scores">
-      <div class="score-block">
-        <span class="score-num p1" id="score-p1">0</span>
-        <span class="score-lbl">You</span>
-      </div>
-      <div class="score-block">
-        <span class="score-num p2" id="score-p2">0</span>
-        <span class="score-lbl">AI</span>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;">
-      <div class="turn-badge">
-        <div id="turn-dot"></div>
-        <span id="turn-label">—</span>
-      </div>
-      <button class="btn-rules" id="btn-rules" title="How to play">?</button>
-    </div>
-  </div>
-
-  <div class="canvas-wrap">
-    <canvas id="board"></canvas>
-    <div class="col-labels" id="col-labels"></div>
-  </div>
-
-  <div class="controls">
-    <button id="btn-new">New Game</button>
-    <button id="btn-watch">Watch AI vs AI</button>
-    <button onclick="window.location.href='replay.html'">Replays &amp; Leaderboard</button>
-  </div>
-
-  <div id="status">Press New Game to start</div>
-  <div class="game-id" id="game-id-label"></div>
-
-  <div class="cold-start-notice">
-    <p>First load may take up to 60 seconds — free tier server waking up</p>
-  </div>
-
+  <script src="board.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
