@@ -288,8 +288,7 @@
   else window.addEventListener('resize', fit);
 
   function onThemeChange() { board.readTheme(); draw(); }
-  if (darkQuery.addEventListener) darkQuery.addEventListener('change', onThemeChange);
-  else if (darkQuery.addListener) darkQuery.addListener(onThemeChange);
+  window.addEventListener('c4-theme', onThemeChange);
 
   fit();
   update();

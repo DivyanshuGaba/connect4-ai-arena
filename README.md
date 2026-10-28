@@ -63,6 +63,7 @@ connect4-ai-arena/
 │   ├── replay.html              # Replay and leaderboard page
 │   ├── replay.js                # Replay player logic
 │   ├── board.js                 # Shared canvas board renderer
+│   ├── theme.js                 # Light and dark mode toggle (light by default)
 │   └── style.css                # Shared design system (light and dark themes)
 ├── tests/
 │   └── test_board.py            # 9 pytest unit tests

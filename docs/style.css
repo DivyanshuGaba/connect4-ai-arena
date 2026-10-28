@@ -1,7 +1,7 @@
 /* Connect 4 AI Arena: shared styles for the game page and the replay page. */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --page: #dde4ee;
   --surface: #f4f7fb;
@@ -29,22 +29,22 @@
   --font-body: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #0a0f1e;
-    --surface: #121a30;
-    --surface-2: #19243f;
-    --line: #26325a;
-    --ink: #e8edf7;
-    --ink-2: #9aa8c4;
-    --on-ink: #0a0f1e;
-    --focus: #7fa6ff;
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-    --board-face: #223a78;
-    --board-face-hi: #2e4a94;
-    --board-back: #060a16;
-    --board-shadow: 0 22px 30px rgba(0, 0, 0, 0.55);
-  }
+  --page: #000000;
+  --surface: #0e0e0e;
+  --surface-2: #1a1a1a;
+  --line: #2e2e2e;
+  --ink: #f2f2f2;
+  --ink-2: #a3a3a3;
+  --on-ink: #000000;
+  --focus: #7fa6ff;
+
+  --board-face: #223a78;
+  --board-face-hi: #2e4a94;
+  --board-back: #000000;
+  --board-shadow: 0 22px 30px rgba(0, 0, 0, 0.55);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -137,6 +137,20 @@ a { color: inherit; }
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
+}
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0 !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 50%;
+}
+
+.theme-toggle:hover {
+  border-color: var(--ink) !important;
 }
 
 .nav a:hover,

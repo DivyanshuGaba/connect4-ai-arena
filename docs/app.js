@@ -520,8 +520,7 @@
     board.readTheme();
     schedule();
   }
-  if (darkQuery.addEventListener) darkQuery.addEventListener('change', onThemeChange);
-  else if (darkQuery.addListener) darkQuery.addListener(onThemeChange);
+  window.addEventListener('c4-theme', onThemeChange);
 
   /* ---------- Start ---------- */
 
