@@ -52,10 +52,12 @@
           <div class="score">
             <span class="score-label"><span class="disc you" id="score-you-disc"></span><span id="score-you-name">You</span></span>
             <span class="score-num" id="score-you">0</span>
+            <span class="score-rating" id="score-you-rating" title="Rating: goes up when you win and down when you lose." hidden></span>
           </div>
           <div class="score">
             <span class="score-label"><span class="disc ai" id="score-ai-disc"></span><span id="score-ai-name">AI</span></span>
             <span class="score-num" id="score-ai">0</span>
+            <span class="score-rating" id="score-ai-rating" hidden></span>
           </div>
         </div>
 
@@ -127,7 +129,7 @@
 
   <dialog class="rules" id="online" aria-labelledby="online-title">
     <h2 id="online-title">Play online</h2>
-    <p class="dialog-lead" id="online-lead">Play another person in real time. Winning raises your rating, and the ratings are on the Replays and leaderboard page.</p>
+    <p class="dialog-lead" id="online-lead">Play another person in real time. Everyone starts with a rating of 1200. Winning raises your rating, losing lowers it, and the ranking is on the Replays and leaderboard page.</p>
 
     <div class="name-field" id="name-saved" hidden>
       <span>Playing as <strong id="name-shown"></strong></span>

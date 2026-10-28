@@ -25,6 +25,8 @@
   const scoreYouName = document.getElementById('score-you-name');
   const scoreAiDisc = document.getElementById('score-ai-disc');
   const scoreAiName = document.getElementById('score-ai-name');
+  const scoreYouRating = document.getElementById('score-you-rating');
+  const scoreAiRating = document.getElementById('score-ai-rating');
   const btnOnline = document.getElementById('btn-online');
   const inviteBox = document.getElementById('invite');
   const inviteLink = document.getElementById('invite-link');
@@ -204,13 +206,18 @@
     if (online && online.seat) {
       scoreYouDisc.className = 'disc ' + kindFor(online.seat);
       scoreAiDisc.className = 'disc ' + kindFor(online.seat === 1 ? 2 : 1);
-      scoreYouName.textContent = 'You' + (online.myElo ? ' (' + online.myElo + ')' : '');
+      scoreYouName.textContent = 'You';
       scoreAiName.textContent = online.oppName;
+      scoreYouRating.hidden = !online.myElo;
+      scoreYouRating.textContent = 'Rating ' + online.myElo;
+      scoreAiRating.hidden = true;
     } else {
       scoreYouDisc.className = 'disc you';
       scoreAiDisc.className = 'disc ai';
       scoreYouName.textContent = 'You';
       scoreAiName.textContent = 'AI';
+      scoreYouRating.hidden = true;
+      scoreAiRating.hidden = true;
     }
   }
 
@@ -443,7 +450,7 @@
     onlineTitle.textContent = room ? "Join a friend's game" : 'Play online';
     onlineLead.textContent = room
       ? 'A friend invited you to a game. Pick a name to join.'
-      : 'Play another person in real time. Winning raises your rating, and the ratings are on the Replays and leaderboard page.';
+      : 'Play another person in real time. Everyone starts with a rating of 1200. Winning raises your rating, losing lowers it, and the ranking is on the Replays and leaderboard page.';
     btnQuick.hidden = !!room;
     btnFriend.hidden = !!room;
     btnJoinRoom.hidden = !room;
@@ -679,11 +686,23 @@
     schedule();
   }
 
+  // Newer servers send both players' names. Older ones do not, and we keep
+  // the generic label.
+  function learnOpponentName(data) {
+    if (!data.usernames || !online) return;
+    const name = data.usernames[String(mySeat() === 1 ? 2 : 1)];
+    if (name && name !== online.oppName) {
+      online.oppName = name;
+      applyScoreLabels();
+    }
+  }
+
   async function handlePlayEvent(data, mine) {
     if (mine !== session || !online) return;
 
     if (data.event === 'sync') {
       online.seat = data.seat;
+      learnOpponentName(data);
       falling.forEach((p) => p.resolve());
       falling = [];
       grid = data.grid;
@@ -698,6 +717,7 @@
       applyScoreLabels();
       updateTurnStatus();
     } else if (data.event === 'opponent_connected') {
+      learnOpponentName(data);
       oppPresent = true;
       online.everConnected = true;
       inviteBox.hidden = true;

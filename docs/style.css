@@ -220,6 +220,7 @@ canvas.board.is-static { cursor: default; }
 
 .score {
   display: grid;
+  align-content: start;
   gap: 4px;
   padding: 14px 16px;
   border-radius: 14px;
@@ -242,6 +243,14 @@ canvas.board.is-static { cursor: default; }
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
+
+.score-rating {
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.score-rating[hidden] { display: none; }
 
 .status {
   display: grid;

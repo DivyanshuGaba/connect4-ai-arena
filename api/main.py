@@ -319,11 +319,16 @@ async def play_pvp_game(websocket: WebSocket, game_id: str, token: str):
     relay_task = asyncio.create_task(manager.relay_subscription(session, seat))
 
   
-    await websocket.send_json({"event": "sync", "seat": seat, **state_to_dict(game_id, session.state)})
+    await websocket.send_json({
+        "event": "sync", "seat": seat, "usernames": session.usernames,
+        **state_to_dict(game_id, session.state),
+    })
 
     opponent_seat = session.opponent_seat(seat)
     if session.connections[opponent_seat] is not None:
-        await manager.send_to_seat(session, opponent_seat, {"event": "opponent_connected"})
+        await manager.send_to_seat(session, opponent_seat, {
+            "event": "opponent_connected", "usernames": session.usernames,
+        })
 
     async def on_forfeit(session: GameSession, forfeiting_seat: int):
         session.finished = True
