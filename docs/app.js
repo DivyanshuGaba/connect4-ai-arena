@@ -689,6 +689,12 @@
       grid = data.grid;
       turn = data.current_player;
       busy = false;
+      // The server only announces "opponent_connected" to whoever connected
+      // first, so assume the other player is here unless we are a host still
+      // waiting for a friend to arrive.
+      const hostWaiting = online.friend && online.seat === 1 && !online.everConnected;
+      oppPresent = !hostWaiting;
+      if (oppPresent) online.everConnected = true;
       applyScoreLabels();
       updateTurnStatus();
     } else if (data.event === 'opponent_connected') {
@@ -704,6 +710,7 @@
     } else if (data.event === 'move') {
       const row = dropRow(data.col, grid);
       busy = false;
+      if (data.player !== mySeat()) { oppPresent = true; online.everConnected = true; inviteBox.hidden = true; }
       if (row >= 0) {
         grid[row][data.col] = data.player;
         addLog(data.player, data.col);
